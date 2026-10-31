@@ -74,11 +74,29 @@ cd graphite
 pnpm install
 cp .env.example .env        # fill in values
 docker compose up -d        # postgres, redis, minio, observability stack
-pnpm db:migrate
+pnpm db:setup               # roles, schemas, test DB, migrations
+pnpm db:migrate             # apply pending migrations
 pnpm dev                    # starts web, api, worker, data service
 ```
 
 Open http://localhost:3000.
+
+### Local service ports
+| Service | Port | Notes |
+|---|---|---|
+| web | 3000 | Next.js |
+| api | 4000 | Express (tRPC, REST, WebSockets) |
+| worker health | 4001 | BullMQ worker health endpoint |
+| postgres | 5433 | Mapped from 5432 to avoid host conflicts |
+| redis | 6380 | Mapped from 6379 to avoid host conflicts |
+| minio | 9002 (API), 9003 (console) | Mapped from 9000/9001 |
+| data gRPC | 50051 | gRPC query service |
+| data health | 50052 | HTTP health endpoint |
+
+The nonstandard host ports (5433, 6380, 9002) dodge conflicts with services commonly installed on developer machines. All values are set in `.env`.
+
+### AI provider
+`LLM_PROVIDER=mock` (the default when no key is set) runs a deterministic scripted model so the full product works end to end without an LLM API key. Set `LLM_PROVIDER=anthropic` plus `ANTHROPIC_API_KEY` for a real model. Mock runs are labeled `mock-scripted` in the UI and in `agent_runs.model`.
 
 ### Useful scripts
 | Command | Description |

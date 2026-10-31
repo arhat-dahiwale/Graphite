@@ -15,16 +15,16 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 0: Foundation
 **Goal:** a reproducible monorepo and local environment.
 
-- [ ] Turborepo + pnpm workspace with apps and packages from the README layout
-- [ ] TypeScript, ESLint, Prettier, shared tsconfig
-- [ ] Docker Compose: Postgres, Redis, MinIO
-- [ ] Drizzle set up with a migration pipeline
-- [ ] GitHub Actions: lint, typecheck, test
-- [ ] `.env.example` and base README
+- [x] Turborepo + pnpm workspace with apps and packages from the README layout
+- [x] TypeScript, ESLint, Prettier, shared tsconfig
+- [x] Docker Compose: Postgres, Redis, MinIO
+- [x] Drizzle set up with a migration pipeline
+- [x] GitHub Actions: lint, typecheck, test
+- [x] `.env.example` and base README
 
 **Exit criteria**
-- [ ] `pnpm install && docker compose up -d && pnpm dev` starts all apps
-- [ ] Each app exposes a hello-world endpoint
+- [x] `pnpm install && docker compose up -d && pnpm dev` starts all apps
+- [x] Each app exposes a hello-world endpoint
 
 ---
 
@@ -226,7 +226,7 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 
 Tick a phase only when every box inside it is checked.
 
-- [ ] Phase 0: Foundation
+- [x] Phase 0: Foundation
 - [ ] Phase 1: Auth, orgs, projects
 - [ ] Phase 2: CSV ingestion
 - [ ] Phase 3: Manual dashboard

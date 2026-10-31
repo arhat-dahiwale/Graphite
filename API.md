@@ -51,9 +51,11 @@ Interfaces: REST, tRPC, Server-Sent Events, WebSocket, gRPC, and MCP. Keep this 
 ### Health and ops
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/healthz` | none | Liveness |
+| GET | `/healthz` | none | Liveness (api :4000, worker :4001, data service :50052) |
 | GET | `/readyz` | none | Readiness (Postgres, Redis) |
 | GET | `/metrics` | internal | Prometheus metrics |
+
+Each long-running process exposes the same `/healthz` + `/readyz` pair: api on `API_PORT` (4000), the worker on `WORKER_HEALTH_PORT` (4001), and the data service on `DATA_HEALTH_PORT` (50052) next to its gRPC listener on `DATA_GRPC_PORT` (50051).
 
 ### Auth
 Handled by the auth library under `/api/auth/*` (sign-up, sign-in, sign-out, OAuth callbacks, session, organization endpoints if the library provides them).

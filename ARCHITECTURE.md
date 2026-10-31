@@ -81,10 +81,11 @@ All jobs are idempotent (keyed by dataset ID or run ID) and use exponential back
 
 ### 3.4 services/data (gRPC)
 Owns all execution of user-visible SQL.
-- Connects as `graphite_readonly`, which has SELECT only on the `datasets` schema.
+- Opens two pools: a metadata pool as `graphite_app` (resolves dataset IDs to physical tables) and a query pool as `graphite_readonly`, which has SELECT only on the `datasets` schema.
 - Enforces `statement_timeout`, a row limit, and an allowlist of tables per request (the caller passes dataset IDs).
 - Parses SQL (AST check) to reject anything but a single SELECT.
 - Methods: `DescribeDataset`, `RunQuery`, `SampleRows`, `ColumnStats`.
+- Exposes an HTTP `/healthz` on `DATA_HEALTH_PORT` (50052) for probes.
 
 ### 3.5 packages/mcp-server
 Defines tools and resources once with the MCP TypeScript SDK and Zod schemas.
