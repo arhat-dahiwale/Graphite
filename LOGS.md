@@ -109,3 +109,15 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Docs updated:** API.md (run router details, model labeling)
 **Decisions:** the panel uses a dedicated SSE transport + react-query instead of the literal useChat hook — the run protocol is step-streaming, not chat-protocol; noted as a deviation on the Phase 4 box. Mock retries invalid specs after zod/tool-error feedback; execute errors and input-validation errors both surface as error results to the model
 **Follow-ups:** live-LLM verification deferred (no API key): build-dashboard exit criterion and agent-behavior-unchanged (Phase 5) remain unchecked; tracked in PHASES.md
+
+### 2026-11-01 09:55 | GLM-5.3-Flash (overnight run) | Phase 5
+**Task:** Tools behind MCP (internal) — protocol server, orchestrator switch
+**Summary:**
+- packages/mcp-server: Streamable-HTTP MCP server (stateless mode) over Express; per-request McpServer bound to the caller's identity; ten tools registered (Phase 4 four + list_projects/list_datasets/list_dashboards/list_charts/sample_rows/add_chart_to_dashboard); tool errors surface as isError content so models can retry
+- Identity propagation: HMAC-signed internal context headers (userId, orgId, runId, dashboardId) verified with timing-safe compare; external gph_live_ tokens already accepted via sha256 lookup (UI in Phase 7); both paths converge on ToolContext
+- Orchestrator switched to @ai-sdk/mcp createMCPClient (v7 moved it out of `ai`): the worker mounts the internal MCP server on 127.0.0.1:<port> and connects with signed run identity; direct AI SDK tool wrappers removed
+- Worker: internal MCP endpoint + agent-run queue wiring updated; test harness mounts the same MCP server so integration tests exercise the real path
+**Tests:** 5 new MCP tests — ten tools listed via protocol client, signed-identity reads, tampered signature rejected, cross-tenant dataset access NOT_FOUND inside the tool, audit rows with actor_type agent/mcp + runId; agent suite (6) re-run through MCP — same behavior incl. invalid-spec retry via MCP error content; fixed mock error detection for MCP "content" envelopes and made chart progression a pure function of (createdOk, createdErr); api suites serialized (fileParallelism: false) — they share one test DB/Redis
+**Docs updated:** API.md (MCP tools/auth), ARCHITECTURE.md (orchestrator via MCP)
+**Decisions:** stateless MCP mode (no sessions) per ARCHITECTURE tradeoffs; AI SDK v7 requires the separate @ai-sdk/mcp client package
+**Follow-ups:** live-LLM verification of "agent behavior unchanged" deferred (tracked in PHASES.md)

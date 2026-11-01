@@ -17,6 +17,7 @@
     "@graphite/core": "workspace:*",
     "@graphite/data": "workspace:*",
     "@graphite/db": "workspace:*",
+    "@graphite/mcp-server": "workspace:*",
     "@graphite/storage": "workspace:*",
     "@trpc/server": "^11.22.1",
     "better-auth": "^1.7.14",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@grpc/grpc-js": "^1.14.7",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/multer": "^2.3.0",

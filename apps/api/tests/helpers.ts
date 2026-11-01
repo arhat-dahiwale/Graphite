@@ -9,6 +9,8 @@ import { createDataService } from "../../../services/data/src/service.js";
 import { ServerCredentials } from "@grpc/grpc-js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express from "express";
+import { createMcpRouter } from "@graphite/mcp-server/server";
 import { startIngestionWorker } from "../../../apps/worker/src/queues/ingestion.js";
 import { startAgentRunWorker } from "../../../apps/worker/src/queues/agent-run.js";
 import { createDataClient, type DataClient } from "@graphite/data/client";
@@ -41,6 +43,9 @@ export interface TestApp {
   ingestionQueue: Queue;
   dataPort: number;
   authSecret: string;
+  /** Internal MCP server (the agent's only tool source). */
+  mcpPort: number;
+  mcpSecret: string;
   close: () => Promise<void>;
 }
 
@@ -117,14 +122,33 @@ export async function startTestApp(
     bucket: TEST_BUCKET,
     concurrency: 2,
   });
+  // The test harness mounts the SAME internal MCP server the worker uses in
+  // production, so agent tool calls flow through MCP here as well.
+  const mcpSecret = "test-internal-mcp-secret";
+  const mcpApp = express();
+  mcpApp.use(express.json({ limit: "2mb" }));
+  mcpApp.use(
+    createMcpRouter({
+      db,
+      sql,
+      redis,
+      getDataClient: () => {
+        dataClientLazy ??= createDataClient(`127.0.0.1:${dataPort}`);
+        return dataClientLazy;
+      },
+      secret: mcpSecret,
+    }),
+  );
+  const mcpServer = mcpApp.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => mcpServer.once("listening", resolve));
+  const mcpAddr = mcpServer.address();
+  if (!mcpAddr || typeof mcpAddr === "string") throw new Error("no mcp port");
   const agentWorker: BullWorker = startAgentRunWorker({
     connection: redis,
     db,
     sql,
-    getDataClient: () => {
-      dataClientLazy ??= createDataClient(`127.0.0.1:${dataPort}`);
-      return dataClientLazy;
-    },
+    mcpBaseUrl: `http://127.0.0.1:${mcpAddr.port}`,
+    mcpSecret,
     tokenBudget: opts?.agentTokenBudget ?? Number(process.env.AGENT_TOKEN_BUDGET ?? 200_000),
     concurrency: 2,
   });
@@ -175,10 +199,13 @@ export async function startTestApp(
     ingestionQueue,
     dataPort,
     authSecret,
+    mcpPort: mcpAddr.port,
+    mcpSecret,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await worker.close();
       await agentWorker.close();
+      await new Promise<void>((resolve) => mcpServer.close(() => resolve()));
       await ingestionQueue.close();
       await agentRunQueue.close();
       grpcServer.tryShutdown(() => undefined);

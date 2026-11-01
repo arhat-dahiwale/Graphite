@@ -324,7 +324,8 @@ Errors map to gRPC status codes: `INVALID_ARGUMENT` (rejected SQL), `DEADLINE_EX
 - Endpoint: `POST|GET|DELETE /mcp` (Streamable HTTP)
 - Auth: `Authorization: Bearer gph_live_...` (OAuth 2.1 in Phase 10)
 - Identity: every call runs as the token's user within the token's organization and scopes
-- Internal agent uses the same tools through the AI SDK MCP client
+- Internal agent: the orchestrator connects to the internal MCP server (mounted in the worker on WORKER_INTERNAL_MCP_PORT) through the @ai-sdk/mcp client; identity (user, org, run, dashboard) travels in HMAC-signed `x-graphite-internal-context`/`-signature` headers so every tool call executes with the run's identity
+- External token auth (gph_live_...) is already accepted by the same endpoint; the Integrations UI arrives in Phase 7
 
 ### Tools
 
@@ -337,7 +338,7 @@ Errors map to gRPC status codes: `INVALID_ARGUMENT` (rejected SQL), `DEADLINE_EX
 | `run_sql` | `datasets:read` | Read-only SELECT with limits | `datasetId`, `sql`, `limit` (max 1000) |
 | `list_dashboards` | `charts:read` | Dashboards in a project | `projectId` |
 | `list_charts` | `charts:read` | Charts on a dashboard with current specs | `dashboardId` |
-| `create_chart_spec` | `charts:write` | Validate and store a new chart | `datasetId`, `spec`, `dashboardId?` |
+| `create_chart_spec` | `charts:write` | Validate and store a new chart | `spec`, `dashboardId?` (defaults to the run's dashboard for agent callers) |
 | `update_chart_spec` | `charts:write` | New version for an existing chart | `chartId`, `spec`, `reason?` |
 | `add_chart_to_dashboard` | `charts:write` | Place a chart on a dashboard | `dashboardId`, `chartId`, `position?` |
 

@@ -6,6 +6,7 @@ import express from "express";
 import Redis from "ioredis";
 import { createStorage, ensureBucket } from "@graphite/storage";
 import { createDataClient, type DataClient } from "@graphite/data/client";
+import { createMcpRouter } from "@graphite/mcp-server/server";
 import { startIngestionWorker } from "./queues/ingestion";
 import { startAgentRunWorker } from "./queues/agent-run";
 
@@ -35,6 +36,8 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().optional(),
   DATA_GRPC_HOST: z.string().default("127.0.0.1"),
   DATA_GRPC_PORT: z.string().default("50051"),
+  BETTER_AUTH_SECRET: z.string().default("dev-worker-internal-secret"),
+  WORKER_INTERNAL_MCP_PORT: z.coerce.number().int().default(4100),
 });
 
 const env = parseEnv(envSchema);
@@ -54,11 +57,29 @@ async function main(): Promise<void> {
   });
   await ensureBucket(storage, env.S3_BUCKET);
 
-  const dataClients = new Map<string, never>();
-  void dataClients;
-  const dataGrpcHost = process.env.DATA_GRPC_HOST ?? "127.0.0.1";
-  const dataGrpcPort = process.env.DATA_GRPC_PORT ?? "50051";
   let dataClient: DataClient | null = null;
+  const getDataClient = (): DataClient => {
+    dataClient ??= createDataClient(`${env.DATA_GRPC_HOST}:${env.DATA_GRPC_PORT}`);
+    return dataClient;
+  };
+
+  // Internal-only MCP server: the agent orchestrator connects here as its sole
+  // tool source. Identity arrives via signed internal headers.
+  const mcpApp = express();
+  mcpApp.disable("x-powered-by");
+  mcpApp.use(express.json({ limit: "2mb" }));
+  mcpApp.use(
+    createMcpRouter({
+      db,
+      sql,
+      redis,
+      getDataClient,
+      secret: env.BETTER_AUTH_SECRET,
+    }),
+  );
+  mcpApp.listen(env.WORKER_INTERNAL_MCP_PORT, "127.0.0.1", () => {
+    log.info({ port: env.WORKER_INTERNAL_MCP_PORT }, "internal MCP server listening");
+  });
 
   const workers = [
     startIngestionWorker({
@@ -73,10 +94,8 @@ async function main(): Promise<void> {
       connection: redis,
       db,
       sql,
-      getDataClient: () => {
-        dataClient ??= createDataClient(`${dataGrpcHost}:${dataGrpcPort}`);
-        return dataClient;
-      },
+      mcpBaseUrl: `http://127.0.0.1:${env.WORKER_INTERNAL_MCP_PORT}`,
+      mcpSecret: env.BETTER_AUTH_SECRET,
       tokenBudget: env.AGENT_TOKEN_BUDGET,
       concurrency: env.AGENT_RUN_CONCURRENCY,
     }),

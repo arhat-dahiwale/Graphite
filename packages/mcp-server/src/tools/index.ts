@@ -1,17 +1,21 @@
 import { z } from "zod";
 import { notFound, unprocessable, dashboardEventsChannel } from "@graphite/core";
-import { datasetColumns } from "@graphite/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { datasetColumns, datasets as datasetsTable } from "@graphite/db/schema";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { safeParseChartSpec, compileChartQuery } from "@graphite/chart-spec";
 import {
+  addToDashboard,
   createChart,
   createChartVersion,
   getChartById,
   getDashboardPlacements,
+  listDashboardCharts,
 } from "@graphite/db/repo/charts";
 import { getDatasetById } from "@graphite/db/repo/datasets";
 import { getDashboardById } from "@graphite/db/repo/dashboards";
 import { writeAudit } from "@graphite/db/repo/audit";
+import { projects } from "@graphite/db/schema";
+import { dashboards as dashboardsTable } from "@graphite/db/schema";
 
 import { requireTool, type ToolContext } from "../context";
 
@@ -281,4 +285,190 @@ export async function updateChartSpec(
     });
   }
   return { chartId: chart.id, versionId: version.id, version: version.versionNumber };
+}
+
+// ---------------------------------------------------------------------------
+// list_projects
+// ---------------------------------------------------------------------------
+
+export const listProjectsInput = z.object({}).strict();
+
+export async function listProjects(ctx: ToolContext, _input: z.output<typeof listProjectsInput>) {
+  requireTool(ctx.actor, "project:read", { type: "project", organizationId: ctx.actor.orgId });
+  const rows = await ctx.db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.organizationId, ctx.actor.orgId), isNull(projects.deletedAt)))
+    .orderBy(asc(projects.createdAt));
+  return { projects: rows.map((p) => ({ id: p.id, name: p.name, description: p.description })) };
+}
+
+// ---------------------------------------------------------------------------
+// list_datasets
+// ---------------------------------------------------------------------------
+
+export const listDatasetsInput = z.object({ projectId: z.string().min(1) });
+
+export async function listDatasets(ctx: ToolContext, input: z.output<typeof listDatasetsInput>) {
+  requireTool(ctx.actor, "dataset:read", { type: "dataset", organizationId: ctx.actor.orgId });
+  const rows = await ctx.db
+    .select()
+    .from(datasetsTable)
+    .where(
+      and(
+        eq(datasetsTable.projectId, input.projectId),
+        eq(datasetsTable.organizationId, ctx.actor.orgId),
+        isNull(datasetsTable.deletedAt),
+      ),
+    )
+    .orderBy(asc(datasetsTable.createdAt));
+  return {
+    datasets: rows.map((d) => ({
+      id: d.id,
+      name: d.name,
+      status: d.status,
+      rowCount: d.rowCount,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// list_dashboards
+// ---------------------------------------------------------------------------
+
+export const listDashboardsInput = z.object({ projectId: z.string().min(1) });
+
+export async function listDashboards(ctx: ToolContext, input: z.output<typeof listDashboardsInput>) {
+  requireTool(ctx.actor, "dashboard:read", { type: "dashboard", organizationId: ctx.actor.orgId });
+  const rows = await ctx.db
+    .select()
+    .from(dashboardsTable)
+    .where(
+      and(
+        eq(dashboardsTable.projectId, input.projectId),
+        eq(dashboardsTable.organizationId, ctx.actor.orgId),
+        isNull(dashboardsTable.deletedAt),
+      ),
+    )
+    .orderBy(asc(dashboardsTable.createdAt));
+  return { dashboards: rows.map((d) => ({ id: d.id, name: d.name, layoutVersion: d.layoutVersion })) };
+}
+
+// ---------------------------------------------------------------------------
+// list_charts
+// ---------------------------------------------------------------------------
+
+export const listChartsInput = z.object({ dashboardId: z.string().min(1) });
+
+export async function listCharts(ctx: ToolContext, input: z.output<typeof listChartsInput>) {
+  const dash = await getDashboardById(ctx.db, input.dashboardId);
+  if (!dash || dash.deletedAt || dash.organizationId !== ctx.actor.orgId) {
+    throw notFound("Dashboard not found");
+  }
+  requireTool(ctx.actor, "chart:read", { type: "chart", organizationId: ctx.actor.orgId });
+  const views = await listDashboardCharts(ctx.db, input.dashboardId);
+  return {
+    charts: views.map((v) => ({
+      chartId: v.chart.id,
+      title: v.chart.title,
+      version: v.version?.versionNumber ?? 0,
+      spec: v.version?.spec ?? null,
+      position: { x: v.x, y: v.y, w: v.w, h: v.h },
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// sample_rows
+// ---------------------------------------------------------------------------
+
+export const sampleRowsInput = z.object({
+  datasetId: z.string().min(1),
+  limit: z.number().int().min(1).max(20).default(10),
+});
+
+export async function sampleRows(ctx: ToolContext, input: z.output<typeof sampleRowsInput>) {
+  const { dataset } = await compileDatasetFor(ctx, input.datasetId);
+  requireTool(ctx.actor, "dataset:read", {
+    type: "dataset",
+    organizationId: dataset.organizationId,
+  });
+  const result = await ctx.getDataClient().runQuery(
+    { organizationId: ctx.actor.orgId, userId: ctx.actor.userId, requestId: ctx.requestId },
+    [dataset.id],
+    `SELECT * FROM datasets."${dataset.tableName}" ORDER BY _row_id`,
+    input.limit,
+    10_000,
+  );
+  return {
+    columns: result.columns,
+    rows: result.rows.map((row) =>
+      Object.fromEntries(
+        result.columns.map((c, i) => {
+          let v: unknown = null;
+          try {
+            v = row.valuesJson[i] === undefined ? null : JSON.parse(row.valuesJson[i] as string);
+          } catch {
+            v = row.valuesJson[i] ?? null;
+          }
+          if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v)) v = Number(v);
+          return [c, v];
+        }),
+      ),
+    ),
+    truncated: result.truncated,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// add_chart_to_dashboard
+// ---------------------------------------------------------------------------
+
+export const addChartToDashboardInput = z.object({
+  dashboardId: z.string().min(1),
+  chartId: z.string().min(1),
+  position: z
+    .object({
+      x: z.number().int().min(0),
+      y: z.number().int().min(0),
+      w: z.number().int().min(1).max(12),
+      h: z.number().int().min(1).max(24),
+    })
+    .optional(),
+});
+
+export async function addChartToDashboard(
+  ctx: ToolContext,
+  input: z.output<typeof addChartToDashboardInput>,
+) {
+  const dash = await getDashboardById(ctx.db, input.dashboardId);
+  if (!dash || dash.deletedAt || dash.organizationId !== ctx.actor.orgId) {
+    throw notFound("Dashboard not found");
+  }
+  const chart = await getChartById(ctx.db, input.chartId);
+  if (!chart || chart.deletedAt || chart.organizationId !== ctx.actor.orgId) {
+    throw notFound("Chart not found");
+  }
+  requireTool(ctx.actor, "chart:write", { type: "chart", organizationId: ctx.actor.orgId });
+  const pos = input.position ?? {
+    x: 0,
+    y: 0,
+    w: 6,
+    h: 4,
+  };
+  await addToDashboard(ctx.db, input.dashboardId, input.chartId, { ...pos, z: 0 });
+  await writeAudit(ctx.db, {
+    organizationId: ctx.actor.orgId,
+    actorUserId: ctx.actor.userId,
+    actorType: ctx.agentRunId ? "agent" : "mcp",
+    action: "chart.add_to_dashboard",
+    resourceType: "chart",
+    resourceId: input.chartId,
+    metadata: { dashboardId: input.dashboardId, runId: ctx.agentRunId },
+  });
+  await publishChartEvent(ctx, input.dashboardId, {
+    chartId: input.chartId,
+    source: ctx.agentRunId ? "agent" : "mcp",
+  });
+  return { ok: true };
 }

@@ -61,6 +61,57 @@ function toolCallPart(id: string, toolName: string, input: unknown): LanguageMod
   ];
 }
 
+/** MCP results carry errors as isError text/json content; detect all shapes. */
+function outputIndicatesError(
+  output: { type?: string; value?: unknown; isError?: unknown; content?: unknown },
+): boolean {
+  if (output.isError === true) return true;
+  const type = output.type ?? "";
+  if (type.startsWith("error") || type === "execution-denied") return true;
+  if (type === "text" && typeof output.value === "string") {
+    try {
+      const v = JSON.parse(output.value) as { error?: unknown };
+      return v !== null && typeof v === "object" && typeof v.error === "string";
+    } catch {
+      return false;
+    }
+  }
+  if (type === "json" && output.value !== null && typeof output.value === "object") {
+    const v = output.value as {
+      error?: unknown;
+      isError?: unknown;
+      content?: Array<{ text?: string }>;
+    };
+    if (typeof v.error === "string") return true;
+    if (v.isError === true) return true;
+    if (Array.isArray(v.content)) {
+      return contentArrayIndicatesError(v.content);
+    }
+  }
+  // MCP dynamic tools surface results as { type: "content", value: ContentBlock[] }.
+  if (type === "content" && Array.isArray(output.value)) {
+    return contentArrayIndicatesError(output.value as Array<{ type?: string; text?: string }>);
+  }
+  return false;
+}
+
+function contentArrayIndicatesError(content: Array<{ type?: string; text?: string }>): boolean {
+  for (const c of content) {
+    if (typeof c.text === "string") {
+      try {
+        const inner = JSON.parse(c.text) as { error?: unknown };
+        if (inner !== null && typeof inner === "object" && typeof inner.error === "string") {
+          return true;
+        }
+      } catch {
+        // Not JSON: a plain-text tool error message.
+        if (c.text.startsWith("Error:")) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function safeParseSchema(text: string): MockDatasetSchema | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -189,12 +240,15 @@ function readScriptState(options: LanguageModelV4CallOptions): ScriptState {
     if (msg.role === "tool" || msg.role === "assistant") {
       for (const part of msg.content) {
         if (part.type === "tool-result") {
-          const isError =
-            part.output.type.startsWith("error") || part.output.type === "execution-denied";
-          const entry = resultCounts.get(part.toolName) ?? { ok: 0, error: 0 };
-          if (isError) entry.error += 1;
-          else entry.ok += 1;
-          resultCounts.set(part.toolName, entry);
+          if (outputIndicatesError(part.output as { type?: string; value?: unknown })) {
+            const entry = resultCounts.get(part.toolName) ?? { ok: 0, error: 0 };
+            entry.error += 1;
+            resultCounts.set(part.toolName, entry);
+          } else {
+            const entry = resultCounts.get(part.toolName) ?? { ok: 0, error: 0 };
+            entry.ok += 1;
+            resultCounts.set(part.toolName, entry);
+          }
         }
       }
     }
@@ -301,17 +355,15 @@ export function scriptNextResponse(options: LanguageModelV4CallOptions): {
     };
   }
 
-  const slot = createdOk; // 0-based index of the next chart to create
-  if (slot < 3) {
-    // The most recent create attempt errored: correct it instead of advancing.
-    const attempts = createdOk + createdErr;
-    const lastAttemptErrored = createdErr > 0 && attempts > createdOk;
-    if (lastAttemptErrored) {
+  // Chart progression is a pure function of (createdOk, createdErr): a
+  // correction repeats until the first success, then slots advance normally.
+  if (createdOk < 3) {
+    if (createdOk === 0 && createdErr > 0) {
       return {
         parts: [
           ...textParts("The previous spec was invalid. Let me correct it."),
-          ...toolCallPart(`call_create_retry_${slot}`, "create_chart_spec", {
-            spec: specFor(state.schema, "bar", `Chart ${slot + 1} (corrected)`),
+          ...toolCallPart("call_create_retry_0", "create_chart_spec", {
+            spec: specFor(state.schema, "bar", "Chart 1 (corrected)"),
           }),
         ],
         finishReason: "tool-calls",
@@ -322,8 +374,9 @@ export function scriptNextResponse(options: LanguageModelV4CallOptions): {
       { type: "line", title: "Trend over time" },
       { type: "pie", title: "Share by category" },
     ];
+    const slot = createdOk;
     const plan = plans[slot] as { type: "bar" | "line" | "pie"; title: string };
-    const invalidFirst = state.testFlag === "invalid_spec_first" && slot === 0;
+    const invalidFirst = state.testFlag === "invalid_spec_first" && slot === 0 && createdErr === 0;
     const specInput = invalidFirst
       ? {
           ...(specFor(state.schema, "bar", plan.title) as Record<string, unknown>),

@@ -3,7 +3,6 @@ import { childLogger } from "@graphite/core";
 import type Redis from "ioredis";
 import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
-import type { DataClient } from "@graphite/data/client";
 import { executeRun } from "../agent/orchestrator.js";
 
 const log = childLogger({ component: "worker-agent-run" });
@@ -14,7 +13,8 @@ export function startAgentRunWorker(opts: {
   connection: Redis;
   db: Database;
   sql: Sql;
-  getDataClient: () => DataClient;
+  mcpBaseUrl: string;
+  mcpSecret: string;
   tokenBudget: number;
   concurrency: number;
 }): Worker {
@@ -29,7 +29,8 @@ export function startAgentRunWorker(opts: {
           db: opts.db,
           sql: opts.sql,
           redis: opts.connection,
-          getDataClient: opts.getDataClient,
+          mcpBaseUrl: opts.mcpBaseUrl,
+          mcpSecret: opts.mcpSecret,
           tokenBudget: opts.tokenBudget,
         },
         runId,

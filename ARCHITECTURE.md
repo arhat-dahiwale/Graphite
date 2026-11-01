@@ -67,7 +67,7 @@ flowchart LR
 - **tRPC**: all browser-facing typed calls (CRUD, queries, mutations).
 - **REST**: file upload, SSE streams, public share endpoints, MCP HTTP endpoint, OAuth endpoints, health and metrics.
 - **Socket.IO** with the Redis adapter, so users on different instances share rooms.
-- **Orchestrator**: builds prompts, runs the AI SDK tool loop, writes steps to Postgres, publishes run events to Redis.
+- **Orchestrator**: builds prompts, runs the AI SDK tool loop, writes steps to Postgres, publishes run events to Redis. All agent tools come from the MCP server via the @ai-sdk/mcp client; the worker mounts an internal-only MCP endpoint and signs the run identity into every call.
 - **Auth middleware**: resolves session or token into `{ userId, orgId, role }` for every request.
 
 ### 3.3 apps/worker (BullMQ)

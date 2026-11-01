@@ -1,24 +1,15 @@
-import { streamText, tool, stepCountIs, type Tool } from "ai";
+import { streamText, stepCountIs, type ToolSet } from "ai";
+import { createMCPClient } from "@ai-sdk/mcp";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { childLogger, runEventsChannel, type RunEvent } from "@graphite/core";
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { agentRuns, agentSteps, datasets, messages } from "@graphite/db/schema";
 import type { Database } from "@graphite/db/client";
 import type Redis from "ioredis";
 import type { Sql } from "postgres";
-import type { DataClient } from "@graphite/data/client";
 import { getCurrentVersion } from "@graphite/db/repo/charts";
 import { getDatasetColumns } from "@graphite/db/repo/datasets";
-import {
-  createChartSpec,
-  createChartSpecInput,
-  describeDataset,
-  describeDatasetInput,
-  runSql,
-  runSqlInput,
-  updateChartSpec,
-  updateChartSpecInput,
-  type ToolContext,
-} from "@graphite/mcp-server/tools";
+import { signInternalContext } from "@graphite/mcp-server/internal-auth";
 import { createModel } from "./provider.js";
 import { buildRunUserPrompt, buildSystemPrompt } from "./prompts.js";
 
@@ -30,38 +21,48 @@ export interface OrchestratorDeps {
   db: Database;
   sql: Sql;
   redis: Redis;
-  getDataClient: () => DataClient;
+  /** Base URL of the internal MCP server (mounted in this worker process). */
+  mcpBaseUrl: string;
+  /** Secret used to sign the internal identity headers. */
+  mcpSecret: string;
   tokenBudget: number;
 }
 
-/** Phase 4 tool set: the MCP-server cores wrapped as AI SDK tools. */
-export function makeTools(ctx: ToolContext): Record<string, Tool> {
-  return {
-    describe_dataset: tool({
-      description:
-        "Get the schema of a dataset: columns, types, nullability, stats, row count. Call this before writing SQL or chart specs.",
-      inputSchema: describeDatasetInput,
-      execute: (input) => describeDataset(ctx, input),
-    }),
-    run_sql: tool({
-      description:
-        "Run a read-only SELECT against one dataset. Single SELECT only; results are capped. Use it to explore values before building charts.",
-      inputSchema: runSqlInput,
-      execute: (input) => runSql(ctx, input),
-    }),
-    create_chart_spec: tool({
-      description:
-        "Validate and store a new chart from a ChartSpec, optionally placing it on a dashboard. The spec must pass validation; errors are returned for you to fix.",
-      inputSchema: createChartSpecInput,
-      execute: (input) => createChartSpec(ctx, input),
-    }),
-    update_chart_spec: tool({
-      description:
-        "Create a new version of an existing chart with a changed ChartSpec. The previous versions remain in history.",
-      inputSchema: updateChartSpecInput,
-      execute: (input) => updateChartSpec(ctx, input),
-    }),
-  };
+/**
+ * Phase 5: the orchestrator connects to the MCP server as its ONLY tool
+ * source. Identity (user, org, run, dashboard) travels in signed internal
+ * headers, so every tool call executes with the run's identity and passes
+ * through the same MCP path external clients use.
+ */
+async function connectAgentMcpClient(opts: {
+  baseUrl: string;
+  secret: string;
+  userId: string;
+  orgId: string;
+  runId: string;
+  dashboardId: string;
+}): Promise<{ client: Awaited<ReturnType<typeof createMCPClient>>; tools: ToolSet }> {
+  const { context, signature } = signInternalContext(
+    {
+      userId: opts.userId,
+      orgId: opts.orgId,
+      runId: opts.runId,
+      dashboardId: opts.dashboardId,
+      requestId: opts.runId,
+    },
+    opts.secret,
+  );
+  const transport = new StreamableHTTPClientTransport(new URL(`${opts.baseUrl}/mcp`), {
+    requestInit: {
+      headers: {
+        "x-graphite-internal-context": context,
+        "x-graphite-internal-signature": signature,
+      },
+    },
+  });
+  const client = await createMCPClient({ transport });
+  const tools = await client.tools();
+  return { client, tools };
 }
 
 async function isCancelRequested(db: Database, runId: string): Promise<boolean> {
@@ -151,11 +152,12 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
       })),
     };
 
-    // The user prompt was persisted at run creation (messages.runId = runId).
+    // The user prompt was persisted at run creation (role "user", runId).
     const promptRows = await deps.db
       .select()
       .from(messages)
-      .where(eq(messages.runId, runId))
+      .where(and(eq(messages.runId, runId), eq(messages.role, "user")))
+      .orderBy(asc(messages.createdAt))
       .limit(1);
     const userPromptText = promptRows[0]?.content ?? "Build a dashboard from this dataset.";
 
@@ -180,22 +182,21 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
       ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
     });
 
-    const toolCtx: ToolContext = {
-      db: deps.db,
-      sql: deps.sql,
-      redis: deps.redis,
-      getDataClient: deps.getDataClient,
-      actor: { userId: run.createdBy, orgId: run.organizationId, role: "editor" },
-      agentRunId: runId,
-      defaultDashboardId: run.dashboardId,
-      requestId: runId,
-    };
+    const { client: mcpClient, tools } = await connectAgentMcpClient({
+      baseUrl: deps.mcpBaseUrl,
+      secret: deps.mcpSecret,
+      userId: run.createdBy,
+      orgId: run.organizationId,
+      runId,
+      dashboardId: run.dashboardId,
+    });
 
+    try {
     const result = streamText({
       model,
       system,
       messages: [{ role: "user" as const, content: userPrompt }],
-      tools: makeTools(toolCtx),
+      tools,
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: controller.signal,
       onStepFinish: async (step) => {
@@ -307,6 +308,9 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
 
     await finishRun("succeeded");
     await publish("done", { status: "succeeded" });
+    } finally {
+      await mcpClient.close().catch(() => undefined);
+    }
   } catch (e) {
     if (budgetExceeded) {
       const msg = `Token budget exceeded (${totalInput}+${totalOutput} > ${deps.tokenBudget})`;

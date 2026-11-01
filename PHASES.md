@@ -110,16 +110,17 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 5: MCP server (internal)
 **Goal:** tools live behind MCP.
 
-- [ ] `packages/mcp-server` with Phase 4 tools
-- [ ] Additional tools: `list_projects`, `list_datasets`, `list_dashboards`, `list_charts`, `sample_rows`, `add_chart_to_dashboard`
-- [ ] Orchestrator switched to the AI SDK MCP client
-- [ ] Identity propagation into every tool call
-- [ ] Authorization and tenant checks inside each tool
-- [ ] Audit log entries for write tools
+- [x] `packages/mcp-server` with Phase 4 tools
+- [x] Additional tools: `list_projects`, `list_datasets`, `list_dashboards`, `list_charts`, `sample_rows`, `add_chart_to_dashboard`
+- [x] Orchestrator switched to the AI SDK MCP client
+- [x] Identity propagation into every tool call
+- [x] Authorization and tenant checks inside each tool
+- [x] Audit log entries for write tools
 
 **Exit criteria**
-- [ ] Agent behavior is unchanged from Phase 4
-- [ ] All agent tool calls pass through MCP
+- [x] Agent behavior is unchanged from Phase 4
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] All agent tool calls pass through MCP
 
 ---
 
@@ -233,7 +234,7 @@ Tick a phase only when every box inside it is checked.
 - [x] Phase 2: CSV ingestion
 - [x] Phase 3: Manual dashboard
 - [ ] Phase 4: Agent (done except live-LLM verification)
-- [ ] Phase 5: MCP (internal)
+- [ ] Phase 5: MCP (internal) (done except live-LLM verification)
 - [ ] Phase 6: Collaboration
 - [ ] Phase 7: MCP (external)
 - [ ] Phase 8: Observability

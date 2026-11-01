@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     "./tools": "./src/tools/index.ts",
-    "./context": "./src/context.ts"
+    "./context": "./src/context.ts",
+    "./server": "./src/server.ts",
+    "./internal-auth": "./src/internal-auth.ts"
   },
   "scripts": {
     "lint": "eslint .",
@@ -17,12 +19,15 @@
     "@graphite/core": "workspace:*",
     "@graphite/data": "workspace:*",
     "@graphite/db": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "drizzle-orm": "^0.45.4",
+    "express": "^5.3.0",
     "ioredis": "^6.0.0",
     "postgres": "^3.4.9",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
     "eslint": "^10.14.0",
     "typescript": "~6.0.3",

@@ -206,7 +206,7 @@ export async function listDashboardCharts(db: DbLike, dashboardId: string): Prom
     .from(dashboardCharts)
     .innerJoin(charts, eq(dashboardCharts.chartId, charts.id))
     .where(eq(dashboardCharts.dashboardId, dashboardId))
-    .orderBy(asc(dashboardCharts.z));
+    .orderBy(asc(dashboardCharts.z), asc(charts.createdAt));
   const views: DashboardChartView[] = [];
   for (const r of rows) {
     const versionRows = r.chart.currentVersionId
