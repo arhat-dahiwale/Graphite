@@ -134,3 +134,27 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Docs updated:** API.md (relay + multi-instance + client origin note)
 **Decisions:** own writes go over tRPC saveLayout (same semantics, conflict banner) while sockets carry broadcasts; web client points at the API origin because Next dev rewrites cannot proxy WebSockets
 **Follow-ups:** none
+
+### 2026-11-01 11:10 | GLM-5.3-Flash (overnight run) | Final
+**Task:** Overnight build of Phases 0-6, final report
+**Summary:**
+- Completed and tagged phases 0-6 on branch `overnight/phases-0-6` (tags phase-0-done .. phase-6-done); nothing pushed to any remote
+- 96 tests green (core 17, chart-spec 12, worker 7, data 9, db 3, api 48); lint and typecheck clean across all 9 packages on the final commit
+- Verified in a real browser: sign-up -> org -> project -> CSV upload -> dashboard -> manual chart -> drag/persist -> agent "Build a dashboard" producing 3 labeled agent charts
+**Last phase completed:** Phase 6 (collaboration)
+**Deferred / unverified items (all live-LLM):**
+- Phase 4 "Build a dashboard ... at least 3 valid charts" — proven with the scripted mock only; live-LLM line left unchecked in PHASES.md
+- Phase 5 "Agent behavior is unchanged from Phase 4" — proven with the mock only; live-LLM line left unchecked
+- Phase 4/5 tracker rows intentionally unticked with "(done except live-LLM verification)"
+- OAuth sign-in (Google/GitHub) is code-wired but unverified (no provider keys); MCP external token auth path is pre-wired but the Integrations UI is Phase 7; Playwright e2e is Phase 9 scope, not set up
+**How to run locally with the mock model:**
+1. `pnpm install && docker compose up -d` (Postgres :5433, Redis :6380, MinIO :9002 — nonstandard ports dodge host conflicts)
+2. `cp .env.example .env` then `pnpm db:setup && pnpm db:migrate`
+3. `pnpm dev` — open http://localhost:3000, sign up, create org/project/dataset/dashboard
+4. `LLM_PROVIDER=mock` (default without a key) drives the agent with the deterministic `mock-scripted` model; set `LLM_PROVIDER=anthropic` + `ANTHROPIC_API_KEY` for a real model later
+5. `pnpm lint && pnpm typecheck && pnpm test` (integration tests need the docker services up)
+**Top 3 things to review first:**
+1. SQL safety boundary: services/data/src/sqlcheck.ts + handlers.ts (readonly role, AST gate, allowlist, row/timeout caps) and the role grants in packages/db/src/setup.ts — the security-critical core
+2. Agent pipeline: apps/worker/src/agent/* (prompts + injection defenses, orchestrator budgets/cancel) and packages/mcp-server (signed internal identity) — replace/verify the mock with a real model here
+3. Layout concurrency + realtime: packages/db/src/repo/dashboards.ts (saveLayout) and apps/api/src/collab.ts (multi-instance relays) — the correctness-critical collaboration paths
+**Follow-ups:** live-LLM verification of the two deferred criteria; Phase 7+ untouched (hard stop respected)
