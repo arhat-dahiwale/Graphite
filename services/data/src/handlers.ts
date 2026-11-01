@@ -1,4 +1,5 @@
 import { AppError, notFound, unprocessable, type AppError as AppErrorT } from "@graphite/core";
+import { withSpan } from "@graphite/telemetry";
 import type { Sql, TransactionSql } from "postgres";
 import { checkSql } from "./sqlcheck";
 
@@ -111,6 +112,7 @@ export function buildServiceImplementation(options: DataServiceOptions) {
     const cappedRows = Math.max(1, Math.min(Math.floor(rowLimit) || maxQueryRows, maxQueryRows));
     const cappedTimeout = Math.max(1, Math.min(Math.floor(timeoutMs) || statementTimeoutMs, statementTimeoutMs));
     const started = Date.now();
+    return withSpan("sql.query", { "db.statement": sqlText.slice(0, 500), "graphite.row_limit": cappedRows }, async () => {
     try {
       return await readonlySql.begin(async (tx: TransactionSql<Record<string, unknown>>) => {
         await tx.unsafe(`SET LOCAL statement_timeout = ${cappedTimeout}`);
@@ -143,6 +145,7 @@ export function buildServiceImplementation(options: DataServiceOptions) {
       }
       throw new AppError("BAD_REQUEST", msg.slice(0, 300), { cause: e });
     }
+    });
   }
 
   function toRowsResponse(r: {

@@ -1,0 +1,54 @@
+# Observability stack (Phase 8): Prometheus, Grafana, Tempo, OTel collector.
+# Separate file so the base `docker compose up` stays fast. Start with:
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+# or: docker compose -f docker-compose.observability.yml up -d
+# Apps are scraped on the host (pnpm dev) via host.docker.internal.
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    container_name: graphite-prometheus
+    ports:
+      - "9132:9090" # host 9132: 9032-9131 excluded on Windows hosts
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    container_name: graphite-otel-collector
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - ./infra/observability/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+  tempo:
+    image: grafana/tempo:2.10.0
+    container_name: graphite-tempo
+    ports:
+      - "3218:3200" # HTTP API (host 3218: 3118-3217 excluded on Windows hosts)
+    volumes:
+      - ./infra/observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: graphite-grafana
+    ports:
+      - "3001:3000" # host 3001; 3000 is the web app
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  prometheus_data:
+  tempo_data:
+  grafana_data:

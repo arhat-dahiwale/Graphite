@@ -1,5 +1,8 @@
 import { Worker } from "bullmq";
 import { childLogger } from "@graphite/core";
+import { context as otelContext, SpanStatusCode } from "@opentelemetry/api";
+import { extractTraceContext, startSpanFor } from "@graphite/telemetry";
+import { jobDuration } from "@graphite/telemetry/metrics";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type Redis from "ioredis";
 import type { Database } from "@graphite/db/client";
@@ -29,15 +32,29 @@ export function startIngestionWorker(opts: {
   const worker = new Worker(
     INGESTION_QUEUE,
     async (job) => {
+      const started = Date.now();
       const datasetId = String(job.data.datasetId ?? "");
       if (!datasetId) throw new Error("ingestion job missing datasetId");
       log.info({ datasetId, jobId: job.id }, "processing ingestion job");
-      const result = await processIngestion(deps, datasetId);
-      if (result.status === "failed") {
-        // The dataset row carries the error; fail the job without retry storm.
-        throw new Error(`Ingestion failed for ${datasetId}`);
+      const parentCtx = extractTraceContext(job.data.traceContext);
+      const { span, ctx } = startSpanFor(parentCtx, "ingestion.job", {
+        "graphite.dataset_id": datasetId,
+      });
+      try {
+        const result = await otelContext.with(ctx, () => processIngestion(deps, datasetId));
+        if (result.status === "failed") {
+          // The dataset row carries the error; fail the job without retry storm.
+          throw new Error(`Ingestion failed for ${datasetId}`);
+        }
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (e) {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: e instanceof Error ? e.message : "failed" });
+        throw e;
+      } finally {
+        span.end();
+        jobDuration.observe({ queue: INGESTION_QUEUE }, (Date.now() - started) / 1000);
       }
-      return result;
     },
     {
       connection: opts.connection,

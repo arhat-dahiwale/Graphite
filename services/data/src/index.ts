@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { childLogger } from "@graphite/core";
 import { loadRootEnv, parseEnv } from "@graphite/core/config";
+import { startTelemetry } from "@graphite/telemetry";
+import { renderMetrics } from "@graphite/telemetry/metrics";
 import { createDb } from "@graphite/db/client";
 import express from "express";
 import { ServerCredentials } from "@grpc/grpc-js";
@@ -27,6 +29,7 @@ const envSchema = z.object({
 const env = parseEnv(envSchema);
 
 async function main(): Promise<void> {
+  startTelemetry({ serviceName: "graphite-data" });
   // Metadata pool runs as the app role (resolving dataset ids to tables);
   // user-visible SQL runs exclusively through the read-only role pool.
   const { sql } = createDb(env.DATABASE_URL);
@@ -52,6 +55,14 @@ async function main(): Promise<void> {
   const health = express();
   health.disable("x-powered-by");
   health.get("/healthz", (_req, res) => res.json({ status: "ok", service: "data" }));
+  health.get("/metrics", async (_req, res) => {
+    try {
+      res.setHeader("content-type", "text/plain; version=0.0.4; charset=utf-8");
+      res.send(await renderMetrics());
+    } catch {
+      res.status(500).end();
+    }
+  });
   health.listen(env.DATA_HEALTH_PORT, () => {
     log.info({ port: env.DATA_HEALTH_PORT }, "data service health listening");
   });

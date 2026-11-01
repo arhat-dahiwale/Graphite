@@ -4,6 +4,7 @@ import type Redis from "ioredis";
 import { z } from "zod";
 import { childLogger, dashboardEventsChannel } from "@graphite/core";
 import { parseAllowedOrigins } from "@graphite/core/config";
+import { wsConnections } from "@graphite/telemetry/metrics";
 import type { Database } from "@graphite/db/client";
 import { dashboards } from "@graphite/db/schema";
 import { eq } from "drizzle-orm";
@@ -97,6 +98,10 @@ export function setupCollab(opts: CollabOptions): SocketServer {
   void opts.redisSub;
 
   const ns = io.of("/collab");
+
+  // Prometheus: track live Socket.IO connections.
+  ns.on("connection", () => wsConnections.inc());
+  ns.on("disconnect", () => wsConnections.dec());
 
   ns.use(async (socket: CollabSocket, next) => {
     try {

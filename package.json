@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "pnpm -r --parallel --stream run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -25,6 +25,10 @@
     "typescript-eslint": "^8.72.1"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "msgpackr-extract", "protobufjs"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract",
+      "protobufjs"
+    ]
   }
 }

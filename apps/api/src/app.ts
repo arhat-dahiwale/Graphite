@@ -8,6 +8,7 @@ import cors from "cors";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { isAppError, logger, notFound, withTimeout, type AppError } from "@graphite/core";
 import { parseAllowedOrigins } from "@graphite/core/config";
+import { httpRequestDuration, renderMetrics } from "@graphite/telemetry/metrics";
 import { createContext, type AppDeps, type SessionUser } from "./context";
 import { appRouter } from "./routers/index";
 import { invitationsRestRouter } from "./rest/invitations";
@@ -76,9 +77,34 @@ export function createApp(
     next();
   });
 
+  // Prometheus request duration (route label = first path segment pattern to
+  // bound cardinality).
+  app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    res.on("finish", () => {
+      const route = req.path.startsWith("/api/auth")
+        ? "/api/auth/*"
+        : `/${req.path.split("/").slice(1, 4).join("/") || ""}`;
+      httpRequestDuration
+        .labels(req.method, route, String(res.statusCode))
+        .observe(Number(process.hrtime.bigint() - start) / 1e9);
+    });
+    next();
+  });
+
   // Health endpoints (no auth).
   app.get("/healthz", (_req, res) => {
     res.json({ status: "ok", service: "api" });
+  });
+
+  // Prometheus metrics.
+  app.get("/metrics", async (_req, res) => {
+    try {
+      res.setHeader("content-type", "text/plain; version=0.0.4; charset=utf-8");
+      res.send(await renderMetrics());
+    } catch {
+      res.status(500).end();
+    }
   });
 
   app.get("/readyz", async (_req, res) => {

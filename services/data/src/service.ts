@@ -7,6 +7,8 @@ import {
   type ServiceDefinition,
 } from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
+import { context as otelContext, propagation, SpanStatusCode } from "@opentelemetry/api";
+import { startSpanFor } from "@graphite/telemetry";
 import { AppError } from "@graphite/core";
 import { buildServiceImplementation, type DataServiceOptions } from "./handlers";
 
@@ -40,10 +42,10 @@ export function createDataService(options: DataServiceOptions): {
 
   const server = new Server();
   server.addService(proto.graphite.data.v1.DataService.service, {
-    describeDataset: wrap(impl.describeDataset),
-    sampleRows: wrap(impl.sampleRows),
-    columnStats: wrap(impl.columnStats),
-    runQuery: wrap(impl.runQuery),
+    describeDataset: wrap("DescribeDataset", impl.describeDataset),
+    sampleRows: wrap("SampleRows", impl.sampleRows),
+    columnStats: wrap("ColumnStats", impl.columnStats),
+    runQuery: wrap("RunQuery", impl.runQuery),
   });
 
   return { server, impl };
@@ -51,14 +53,34 @@ export function createDataService(options: DataServiceOptions): {
 
 type Handler<TReq, TRes> = (call: ServerUnaryCall<TReq, TRes>) => Promise<TRes>;
 
-function wrap<TReq, TRes>(fn: Handler<TReq, TRes>) {
+/**
+ * Wrap a gRPC handler: extract the caller's W3C trace context from the
+ * request metadata (injected by the DataClient) and run under a server span,
+ * so data-service spans join the caller's trace.
+ */
+function wrap<TReq, TRes>(methodName: string, fn: Handler<TReq, TRes>) {
   return (
     call: ServerUnaryCall<TReq, TRes>,
     callback: sendUnaryData<TRes>,
   ): void => {
-    fn(call)
-      .then((res) => callback(null, res))
+    const parentCtx = propagation.extract(otelContext.active(), call.metadata, {
+      // grpc Metadata values are string[]; propagation needs string | string[].
+      get: (carrier: import("@grpc/grpc-js").Metadata, key: string) => {
+        const v = carrier.get(key) as unknown;
+        return Array.isArray(v) ? (v as string[]) : (v as string | undefined);
+      },
+      keys: (carrier: import("@grpc/grpc-js").Metadata) =>
+        Object.keys(carrier.getMap() as Record<string, unknown>),
+    });
+    const { span, ctx } = startSpanFor(parentCtx, `grpc.server DataService/${methodName}`);
+    otelContext.with(ctx, () => fn(call))
+      .then((res) => {
+        span.end();
+        callback(null, res);
+      })
       .catch((e: unknown) => {
+        span.setStatus({ code: SpanStatusCode.ERROR, message: e instanceof Error ? e.message : "error" });
+        span.end();
         callback({
           code: grpcStatusFor(e),
           message: e instanceof Error ? e.message : "internal error",

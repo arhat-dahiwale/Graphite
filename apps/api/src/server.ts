@@ -1,5 +1,6 @@
 import { childLogger } from "@graphite/core";
 import { loadRootEnv, parseAllowedOrigins } from "@graphite/core/config";
+import { injectTraceContext, startTelemetry } from "@graphite/telemetry";
 import { createDb } from "@graphite/db/client";
 import { getMembership } from "@graphite/db/repo/members";
 import { Queue } from "bullmq";
@@ -16,6 +17,7 @@ loadRootEnv();
 const log = childLogger({ component: "api" });
 
 async function main(): Promise<void> {
+  startTelemetry({ serviceName: "graphite-api" });
   const { sql, db } = createDb(env.DATABASE_URL);
   const redis = createRedis(env.REDIS_URL);
   await redis.connect();
@@ -69,7 +71,13 @@ async function main(): Promise<void> {
       auth,
       getDataClient,
       enqueueAgentRun: async (runId) => {
-        await agentRunQueue.add("run", { runId }, { jobId: `agent-run-${runId}`, removeOnComplete: 200, removeOnFail: 200 });
+        // Propagate the request's trace context to the worker via job data.
+        const traceContext = injectTraceContext({});
+        await agentRunQueue.add(
+          "run",
+          { runId, traceContext },
+          { jobId: `agent-run-${runId}`, removeOnComplete: 200, removeOnFail: 200 },
+        );
       },
       resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
     },

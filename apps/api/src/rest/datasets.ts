@@ -4,6 +4,7 @@ import { createReadStream, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { AppError, isAppError, newId, payloadTooLarge, unprocessable } from "@graphite/core";
+import { injectTraceContext } from "@graphite/telemetry";
 import { datasets, projects } from "@graphite/db/schema";
 import { eq } from "drizzle-orm";
 import { uploadStream } from "@graphite/storage";
@@ -121,7 +122,7 @@ export function datasetsRestRouter(deps: DatasetsRestDeps): Router {
         const jobId = `ingest-${dsId}`;
         await deps.ingestionQueue.add(
           "ingest",
-          { datasetId: dsId },
+          { datasetId: dsId, traceContext: injectTraceContext({}) },
           { jobId, attempts: 3, backoff: { type: "exponential", delay: 2000 }, removeOnComplete: 100 },
         );
 

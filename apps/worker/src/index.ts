@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { childLogger, withTimeout } from "@graphite/core";
 import { loadRootEnv, parseEnv } from "@graphite/core/config";
+import { startTelemetry } from "@graphite/telemetry";
+import { registry, renderMetrics } from "@graphite/telemetry/metrics";
+import client from "prom-client";
 import { createDb } from "@graphite/db/client";
 import express from "express";
 import Redis from "ioredis";
@@ -45,6 +48,7 @@ const envSchema = z.object({
 const env = parseEnv(envSchema);
 
 async function main(): Promise<void> {
+  startTelemetry({ serviceName: "graphite-worker" });
   const { sql, db } = createDb(env.DATABASE_URL);
   const redis = new Redis(env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: null });
   await redis.connect();
@@ -132,6 +136,42 @@ async function main(): Promise<void> {
       .status(ready ? 200 : 503)
       .json({ status: ready ? "ok" : "down", checks: { postgres, redis: redisOk } });
   });
+  // Prometheus metrics incl. queue depth (Phase 8).
+  const queueDepth = new client.Gauge({
+    name: "graphite_queue_depth",
+    help: "BullMQ queue depth (waiting jobs) by queue",
+    labelNames: ["queue"] as const,
+    registers: [registry],
+  });
+  let depthTimer: NodeJS.Timeout | undefined;
+  health.get("/metrics", async (_req, res) => {
+    try {
+      for (const name of ["ingestion", "agent-run"]) {
+        const counts = await new (await import("bullmq")).Queue(name, { connection: redis }).getJobCounts("waiting");
+        queueDepth.labels(name).set(counts.waiting ?? 0);
+      }
+      res.setHeader("content-type", "text/plain; version=0.0.4; charset=utf-8");
+      res.send(await renderMetrics());
+    } catch {
+      res.status(500).end();
+    } finally {
+      clearInterval(depthTimer);
+    }
+  });
+  // Refresh queue depth periodically for scrape independence.
+  depthTimer = setInterval(() => {
+    void (async () => {
+      try {
+        for (const name of ["ingestion", "agent-run"]) {
+          const counts = await new (await import("bullmq")).Queue(name, { connection: redis }).getJobCounts("waiting");
+          queueDepth.labels(name).set(counts.waiting ?? 0);
+        }
+      } catch {
+        // metrics best-effort
+      }
+    })();
+  }, 10_000);
+  depthTimer.unref();
   health.listen(env.WORKER_HEALTH_PORT, () => {
     log.info({ port: env.WORKER_HEALTH_PORT }, "worker health endpoint listening");
   });

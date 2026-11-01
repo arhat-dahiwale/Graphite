@@ -2,6 +2,14 @@ import { streamText, stepCountIs, type ToolSet } from "ai";
 import { createMCPClient } from "@ai-sdk/mcp";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { childLogger, runEventsChannel, type RunEvent } from "@graphite/core";
+import {
+  agentCostUsd,
+  agentRunDuration,
+  agentRunTotal,
+  agentTokens,
+} from "@graphite/telemetry/metrics";
+import { currentTraceId, startSpanFor } from "@graphite/telemetry";
+import { context as otelContext, SpanStatusCode, type Span } from "@opentelemetry/api";
 import { and, asc, eq } from "drizzle-orm";
 import { agentRuns, agentSteps, datasets, messages } from "@graphite/db/schema";
 import type { Database } from "@graphite/db/client";
@@ -80,9 +88,17 @@ async function isCancelRequested(db: Database, runId: string): Promise<boolean> 
  * the token budget and the cancel flag between steps.
  */
 export async function executeRun(deps: OrchestratorDeps, runId: string): Promise<void> {
+  const runStart = Date.now();
   const runRows = await deps.db.select().from(agentRuns).where(eq(agentRuns.id, runId)).limit(1);
   const run = runRows[0];
   if (!run) throw new Error(`Run ${runId} not found`);
+
+  // Persist the OpenTelemetry trace id so the in-app trace viewer and the
+  // end-to-end trace check can find the run's trace ("" when tracing is off).
+  const traceId = currentTraceId();
+  if (traceId) {
+    await deps.db.update(agentRuns).set({ traceId }).where(eq(agentRuns.id, runId));
+  }
 
   let seq = 0;
   const publish = async (type: RunEvent["type"], data: Record<string, unknown>): Promise<void> => {
@@ -130,6 +146,16 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
         finishedAt: new Date(),
       })
       .where(eq(agentRuns.id, runId));
+    // Prometheus: run count, duration, tokens. Cost is intentionally not
+    // recorded for mock runs (figures are simulated).
+    const model = run.model;
+    agentRunTotal.inc({ status, model });
+    agentRunDuration.observe({ status, model }, (Date.now() - runStart) / 1000);
+    if (totalInput > 0) agentTokens.inc({ direction: "input", model }, totalInput);
+    if (totalOutput > 0) agentTokens.inc({ direction: "output", model }, totalOutput);
+    // Cost figures for mock runs are simulated (0 by design); real-model runs
+    // would carry provider pricing here.
+    agentCostUsd.inc({ model }, Number(run.costUsd ?? "0") || 0);
   };
 
   try {
@@ -191,40 +217,56 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
       dashboardId: run.dashboardId,
     });
 
-    try {
-    const result = streamText({
-      model,
-      system,
-      messages: [{ role: "user" as const, content: userPrompt }],
-      tools,
-      stopWhen: stepCountIs(MAX_STEPS),
-      abortSignal: controller.signal,
-      onStepFinish: async (step) => {
-        // Budget + cancel checks happen BETWEEN steps.
-        totalInput += step.usage?.inputTokens ?? 0;
-        totalOutput += step.usage?.outputTokens ?? 0;
-        await persistStep({
-          type: "text",
-          output: { text: step.text ?? "" },
-          inputTokens: step.usage?.inputTokens ?? 0,
-          outputTokens: step.usage?.outputTokens ?? 0,
-        });
-        await publish("usage", {
-          inputTokens: totalInput,
-          outputTokens: totalOutput,
-          costUsd: modelId === "mock-scripted" ? 0 : undefined,
-        });
-        if (totalInput + totalOutput > deps.tokenBudget) {
-          budgetExceeded = true;
-          controller.abort();
-          return;
-        }
-        if (await isCancelRequested(deps.db, runId)) {
-          cancelHit = true;
-          controller.abort();
-        }
-      },
+    // One span for the whole LLM call (the model loop), children per tool call.
+    const { span: llmSpan, ctx: llmCtx } = startSpanFor(undefined, "agent.llm", {
+      "gen_ai.system": "graphite",
+      "gen_ai.request.model": modelId,
     });
+    const toolSpans = new Map<string, Span>();
+
+    try {
+    const result = await (async () => {
+      // streamText runs with the LLM span active so SDK-emitted model spans
+      // (when present) attach underneath.
+      return otelContext.with(llmCtx, () =>
+        streamText({
+          model,
+          system,
+          messages: [{ role: "user" as const, content: userPrompt }],
+          tools,
+          stopWhen: stepCountIs(MAX_STEPS),
+          abortSignal: controller.signal,
+          // OTel spans for the LLM call (ai.streamText + ai.toolCall children);
+          // only active when tracing is enabled (OTEL_ENABLED=true).
+          experimental_telemetry: { isEnabled: currentTraceId() !== "" },
+          onStepFinish: async (step) => {
+            // Budget + cancel checks happen BETWEEN steps.
+            totalInput += step.usage?.inputTokens ?? 0;
+            totalOutput += step.usage?.outputTokens ?? 0;
+            await persistStep({
+              type: "text",
+              output: { text: step.text ?? "" },
+              inputTokens: step.usage?.inputTokens ?? 0,
+              outputTokens: step.usage?.outputTokens ?? 0,
+            });
+            await publish("usage", {
+              inputTokens: totalInput,
+              outputTokens: totalOutput,
+              costUsd: modelId === "mock-scripted" ? 0 : undefined,
+            });
+            if (totalInput + totalOutput > deps.tokenBudget) {
+              budgetExceeded = true;
+              controller.abort();
+              return;
+            }
+            if (await isCancelRequested(deps.db, runId)) {
+              cancelHit = true;
+              controller.abort();
+            }
+          },
+        }),
+      );
+    })();
 
     for await (const part of result.fullStream) {
       if (part.type === "text-delta") {
@@ -233,6 +275,11 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
         await publish("text", { delta });
       } else if (part.type === "tool-call") {
         const p = part as unknown as { toolCallId: string; toolName: string; input: unknown };
+        // Child span per tool call, ended when its result arrives.
+        const { span: toolSpan } = startSpanFor(llmCtx, `agent.tool ${p.toolName}`, {
+          "graphite.tool": p.toolName,
+        });
+        toolSpans.set(p.toolCallId, toolSpan);
         await persistStep({ type: "tool_call", toolName: p.toolName, input: p.input });
         await publish("tool_call", { toolName: p.toolName, input: p.input });
       } else if (part.type === "tool-result") {
@@ -242,6 +289,8 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
           input: unknown;
           output: unknown;
         };
+        toolSpans.get(p.toolCallId)?.end();
+        toolSpans.delete(p.toolCallId);
         await persistStep({
           type: "tool_result",
           toolName: p.toolName,
@@ -264,6 +313,12 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
         // as feedback so it can retry with corrected arguments.
         const p = part as unknown as { toolCallId: string; toolName: string; input: unknown; error: unknown };
         const message = p.error instanceof Error ? p.error.message : String(p.error);
+        const toolSpan = toolSpans.get(p.toolCallId);
+        if (toolSpan) {
+          toolSpan.setStatus({ code: SpanStatusCode.ERROR, message: message.slice(0, 200) });
+          toolSpan.end();
+          toolSpans.delete(p.toolCallId);
+        }
         await persistStep({
           type: "tool_result",
           toolName: p.toolName,
@@ -282,6 +337,10 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
     const finalUsage = await result.usage;
     totalInput = finalUsage?.inputTokens ?? totalInput;
     totalOutput = finalUsage?.outputTokens ?? totalOutput;
+    // The whole model loop finished; close the LLM span.
+    llmSpan.end();
+    for (const s of toolSpans.values()) s.end();
+    toolSpans.clear();
 
     // Persist the assistant reply for the conversation history.
     if (assistantText.length > 0) {
@@ -309,6 +368,10 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
     await finishRun("succeeded");
     await publish("done", { status: "succeeded" });
     } finally {
+      // Idempotent: end() is a no-op if the span already ended on success.
+      llmSpan.end();
+      for (const s of toolSpans.values()) s.end();
+      toolSpans.clear();
       await mcpClient.close().catch(() => undefined);
     }
   } catch (e) {

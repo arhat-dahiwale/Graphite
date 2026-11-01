@@ -2,6 +2,7 @@ import {
   credentials,
   loadPackageDefinition,
   makeGenericClientConstructor,
+  Metadata,
   type ClientUnaryCall,
   type ServiceDefinition,
   type ServiceError,
@@ -9,6 +10,8 @@ import {
 import protoLoader from "@grpc/proto-loader";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { context as otelContext, propagation } from "@opentelemetry/api";
+import { withSpan } from "@graphite/telemetry";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_PROTO_PATH = path.join(dir, "..", "proto", "data.proto");
@@ -40,7 +43,12 @@ export interface RowsResult {
   durationMs: number;
 }
 
-type UnaryFn = (req: unknown, cb: (err: ServiceError | null, res?: unknown) => void) => ClientUnaryCall;
+type UnaryFn = (
+  req: unknown,
+  metadata: Metadata,
+  options: Record<string, unknown>,
+  cb: (err: ServiceError | null, res?: unknown) => void,
+) => ClientUnaryCall;
 
 interface RawClient {
   DescribeDataset: UnaryFn;
@@ -95,21 +103,41 @@ export function createDataClient(address: string, protoPath = DEFAULT_PROTO_PATH
       });
     });
 
+  // Trace context travels in gRPC metadata (W3C traceparent) so the data
+  // service's spans join the caller's trace.
+  const tracedMetadata = (): Metadata => {
+    const metadata = new Metadata();
+    propagation.inject(otelContext.active(), metadata, {
+      set: (carrier: Metadata, key: string, value: string) => carrier.set(key, value),
+    });
+    return metadata;
+  };
+
   return {
     async describeDataset(ctx, datasetId) {
-      return call((cb) => client.DescribeDataset({ ctx, datasetId }, cb));
+      return withSpan("grpc.DataService/DescribeDataset", { "graphite.dataset_id": datasetId }, () =>
+        call((cb) => client.DescribeDataset({ ctx, datasetId }, tracedMetadata(), {}, cb)),
+      );
     },
     async sampleRows(ctx, datasetId, limit) {
-      return call((cb) => client.SampleRows({ ctx, datasetId, limit }, cb));
+      return withSpan("grpc.DataService/SampleRows", { "graphite.dataset_id": datasetId, "graphite.limit": limit }, () =>
+        call((cb) => client.SampleRows({ ctx, datasetId, limit }, tracedMetadata(), {}, cb)),
+      );
     },
     async columnStats(ctx, datasetId, column) {
-      return call((cb) => client.ColumnStats({ ctx, datasetId, column }, cb));
+      return withSpan("grpc.DataService/ColumnStats", { "graphite.dataset_id": datasetId, "graphite.column": column }, () =>
+        call((cb) => client.ColumnStats({ ctx, datasetId, column }, tracedMetadata(), {}, cb)),
+      );
     },
     async runQuery(ctx, datasetIds, sql, rowLimit, timeoutMs) {
-      return call((cb) =>
-        client.RunQuery(
-          { ctx, datasetIds, sql, rowLimit, timeoutMs },
-          cb,
+      return withSpan("grpc.DataService/RunQuery", { "graphite.dataset_ids": datasetIds.join(",") }, () =>
+        call((cb) =>
+          client.RunQuery(
+            { ctx, datasetIds, sql, rowLimit, timeoutMs },
+            tracedMetadata(),
+            {},
+            cb,
+          ),
         ),
       );
     },
