@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "maintenance": "tsx src/maintenance.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.94",

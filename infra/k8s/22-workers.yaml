@@ -1,0 +1,131 @@
+# Workers: ingestion and agent-run, each scaling on its own queue depth via
+# KEDA (install KEDA first: https://keda.sh). Without KEDA, replace the
+# ScaledObjects with CPU-based HPAs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-ingestion
+  namespace: graphite
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: worker-ingestion }
+  template:
+    metadata:
+      labels: { app: worker-ingestion }
+    spec:
+      containers:
+        - name: worker
+          image: graphite-worker:local
+          imagePullPolicy: IfNotPresent
+          command: ["pnpm", "--filter", "@graphite/worker", "start"]
+          env:
+            - name: INGESTION_CONCURRENCY
+              value: "2"
+            - name: AGENT_RUN_CONCURRENCY
+              value: "0" # this deployment ingests only
+          envFrom:
+            - configMapRef: { name: graphite-config }
+            - secretRef: { name: graphite-secrets }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4001 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 4001 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-ingestion
+  namespace: graphite
+spec:
+  selector: { app: worker-ingestion }
+  ports: [{ port: 4001, targetPort: 4001 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-agent
+  namespace: graphite
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: worker-agent }
+  template:
+    metadata:
+      labels: { app: worker-agent }
+    spec:
+      containers:
+        - name: worker
+          image: graphite-worker:local
+          imagePullPolicy: IfNotPresent
+          command: ["pnpm", "--filter", "@graphite/worker", "start"]
+          env:
+            - name: AGENT_RUN_CONCURRENCY
+              value: "2"
+          envFrom:
+            - configMapRef: { name: graphite-config }
+            - secretRef: { name: graphite-secrets }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4001 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 4001 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 300m, memory: 768Mi }
+            limits: { cpu: "1", memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker-agent
+  namespace: graphite
+spec:
+  selector: { app: worker-agent }
+  ports: [{ port: 4001, targetPort: 4001 }]
+---
+# Queue-depth scaling for the ingestion worker (KEDA ScaledObject).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-ingestion
+  namespace: graphite
+spec:
+  scaleTargetRef: { name: worker-ingestion }
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.graphite.svc.cluster.local:6379
+        listName: "bull:ingestion:wait"
+        listLength: "5"
+        enableTLS: "false"
+---
+# Queue-depth scaling for the agent-run worker (KEDA ScaledObject).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-agent
+  namespace: graphite
+spec:
+  scaleTargetRef: { name: worker-agent }
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  cooldownPeriod: 60
+  triggers:
+    - type: redis
+      metadata:
+        address: redis.graphite.svc.cluster.local:6379
+        listName: "bull:agent-run:wait"
+        listLength: "2"
+        enableTLS: "false"

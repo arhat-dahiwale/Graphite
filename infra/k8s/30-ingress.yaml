@@ -1,0 +1,45 @@
+# Ingress (nginx): WebSocket upgrades for /socket.io, sticky sessions for the
+# web + api (session cookies). Apply with the nginx ingress controller.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: graphite
+  namespace: graphite
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    # WebSocket support (socket.io polling + ws upgrade).
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    # Sticky sessions by cookie for Socket.IO long-polling fallback.
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "graphite-ingress"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: graphite.local
+      http:
+        paths:
+          - path: /socket.io
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /trpc
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /mcp
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /oauth
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /.well-known
+            pathType: Prefix
+            backend: { service: { name: api, port: { number: 4000 } } }
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: web, port: { number: 3000 } } }

@@ -1,0 +1,48 @@
+# One-shot migration/setup Job and the recurring maintenance CronJob.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: graphite-migrate
+  namespace: graphite
+  annotations:
+    # Never re-run automatically on apply; run manually or from CI.
+    kubectl.kubernetes.io/job: "manual"
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: graphite-worker:local
+          imagePullPolicy: IfNotPresent
+          command: ["pnpm", "--filter", "@graphite/db", "run", "setup"]
+          envFrom:
+            - configMapRef: { name: graphite-config }
+            - secretRef: { name: graphite-secrets }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: graphite-maintenance
+  namespace: graphite
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: maintenance
+              image: graphite-worker:local
+              imagePullPolicy: IfNotPresent
+              command: ["pnpm", "--filter", "@graphite/worker", "run", "maintenance"]
+              envFrom:
+                - configMapRef: { name: graphite-config }
+                - secretRef: { name: graphite-secrets }

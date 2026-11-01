@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: graphite
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphite-config
+  namespace: graphite
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  DATABASE_URL: "postgres://graphite_app:app_password@postgres:5432/graphite"
+  DATABASE_READONLY_URL: "postgres://graphite_readonly:readonly_password@postgres:5432/graphite"
+  REDIS_URL: "redis://redis:6379"
+  S3_ENDPOINT: "http://minio:9000"
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "graphite-uploads"
+  S3_FORCE_PATH_STYLE: "true"
+  BETTER_AUTH_URL: "http://localhost:4000"
+  WEB_URL: "http://localhost:3000"
+  API_URL: "http://localhost:4000"
+  LLM_PROVIDER: "mock"
+  AGENT_RUN_CONCURRENCY: "2"
+  MAX_UPLOAD_MB: "50"
+  MAX_QUERY_ROWS: "5000"
+  STATEMENT_TIMEOUT_MS: "10000"
+  AGENT_TOKEN_BUDGET: "200000"
+  MCP_TOKEN_RATE_LIMIT: "120"
+  USER_REQUESTS_PER_MIN: "300"
+  ORG_RUNS_PER_HOUR: "30"
+  CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+  DATA_GRPC_HOST: "data"
+  DATA_GRPC_PORT: "50051"
+  WORKER_INTERNAL_MCP_PORT: "4100"
+  WORKER_HEALTH_PORT: "4001"
+  DATA_HEALTH_PORT: "50052"
+  OTEL_ENABLED: "false"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
