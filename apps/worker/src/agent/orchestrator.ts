@@ -1,0 +1,329 @@
+import { streamText, tool, stepCountIs, type Tool } from "ai";
+import { childLogger, runEventsChannel, type RunEvent } from "@graphite/core";
+import { eq } from "drizzle-orm";
+import { agentRuns, agentSteps, datasets, messages } from "@graphite/db/schema";
+import type { Database } from "@graphite/db/client";
+import type Redis from "ioredis";
+import type { Sql } from "postgres";
+import type { DataClient } from "@graphite/data/client";
+import { getCurrentVersion } from "@graphite/db/repo/charts";
+import { getDatasetColumns } from "@graphite/db/repo/datasets";
+import {
+  createChartSpec,
+  createChartSpecInput,
+  describeDataset,
+  describeDatasetInput,
+  runSql,
+  runSqlInput,
+  updateChartSpec,
+  updateChartSpecInput,
+  type ToolContext,
+} from "@graphite/mcp-server/tools";
+import { createModel } from "./provider.js";
+import { buildRunUserPrompt, buildSystemPrompt } from "./prompts.js";
+
+const log = childLogger({ component: "orchestrator" });
+
+const MAX_STEPS = 16;
+
+export interface OrchestratorDeps {
+  db: Database;
+  sql: Sql;
+  redis: Redis;
+  getDataClient: () => DataClient;
+  tokenBudget: number;
+}
+
+/** Phase 4 tool set: the MCP-server cores wrapped as AI SDK tools. */
+export function makeTools(ctx: ToolContext): Record<string, Tool> {
+  return {
+    describe_dataset: tool({
+      description:
+        "Get the schema of a dataset: columns, types, nullability, stats, row count. Call this before writing SQL or chart specs.",
+      inputSchema: describeDatasetInput,
+      execute: (input) => describeDataset(ctx, input),
+    }),
+    run_sql: tool({
+      description:
+        "Run a read-only SELECT against one dataset. Single SELECT only; results are capped. Use it to explore values before building charts.",
+      inputSchema: runSqlInput,
+      execute: (input) => runSql(ctx, input),
+    }),
+    create_chart_spec: tool({
+      description:
+        "Validate and store a new chart from a ChartSpec, optionally placing it on a dashboard. The spec must pass validation; errors are returned for you to fix.",
+      inputSchema: createChartSpecInput,
+      execute: (input) => createChartSpec(ctx, input),
+    }),
+    update_chart_spec: tool({
+      description:
+        "Create a new version of an existing chart with a changed ChartSpec. The previous versions remain in history.",
+      inputSchema: updateChartSpecInput,
+      execute: (input) => updateChartSpec(ctx, input),
+    }),
+  };
+}
+
+async function isCancelRequested(db: Database, runId: string): Promise<boolean> {
+  const rows = await db
+    .select({ cancelRequested: agentRuns.cancelRequested })
+    .from(agentRuns)
+    .where(eq(agentRuns.id, runId))
+    .limit(1);
+  return rows[0]?.cancelRequested ?? false;
+}
+
+/**
+ * Execute an agent run end to end: build prompts, stream the model through
+ * the tool loop, persist every step, publish events to Redis, and enforce
+ * the token budget and the cancel flag between steps.
+ */
+export async function executeRun(deps: OrchestratorDeps, runId: string): Promise<void> {
+  const runRows = await deps.db.select().from(agentRuns).where(eq(agentRuns.id, runId)).limit(1);
+  const run = runRows[0];
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  let seq = 0;
+  const publish = async (type: RunEvent["type"], data: Record<string, unknown>): Promise<void> => {
+    seq += 1;
+    const event: RunEvent = { type, runId, seq, at: new Date().toISOString(), data };
+    await deps.redis.publish(runEventsChannel(runId), JSON.stringify(event));
+  };
+
+  let stepIndex = 0;
+  const persistStep = async (row: {
+    type: "text" | "tool_call" | "tool_result" | "error";
+    toolName?: string;
+    input?: unknown;
+    output?: unknown;
+    durationMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+  }): Promise<void> => {
+    const idx = stepIndex;
+    stepIndex += 1;
+    await deps.db.insert(agentSteps).values({ runId, stepIndex: idx, ...row });
+  };
+
+  await deps.db
+    .update(agentRuns)
+    .set({ status: "running", startedAt: new Date() })
+    .where(eq(agentRuns.id, runId));
+  await publish("status", { status: "running" });
+
+  const controller = new AbortController();
+  let budgetExceeded = false;
+  let cancelHit = false;
+  let totalInput = 0;
+  let totalOutput = 0;
+  let assistantText = "";
+
+  const finishRun = async (status: "succeeded" | "cancelled" | "failed", error?: string) => {
+    await deps.db
+      .update(agentRuns)
+      .set({
+        status,
+        error: error ?? null,
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        finishedAt: new Date(),
+      })
+      .where(eq(agentRuns.id, runId));
+  };
+
+  try {
+    if (!run.datasetId) throw new Error("Run has no dataset");
+    const dsRows = await deps.db
+      .select()
+      .from(datasets)
+      .where(eq(datasets.id, run.datasetId))
+      .limit(1);
+    const ds = dsRows[0];
+    if (!ds || !ds.tableName) throw new Error("Dataset is not ready");
+    const cols = await getDatasetColumns(deps.db, ds.id);
+    const schema = {
+      datasetId: ds.id,
+      tableName: ds.tableName,
+      rowCount: ds.rowCount ?? 0,
+      columns: cols.map((c) => ({
+        name: c.name,
+        type: c.userType ?? c.inferredType,
+      })),
+    };
+
+    // The user prompt was persisted at run creation (messages.runId = runId).
+    const promptRows = await deps.db
+      .select()
+      .from(messages)
+      .where(eq(messages.runId, runId))
+      .limit(1);
+    const userPromptText = promptRows[0]?.content ?? "Build a dashboard from this dataset.";
+
+    let targetSpec: unknown = null;
+    if (run.kind === "remake_chart" && run.targetChartId) {
+      const version = await getCurrentVersion(deps.db, run.targetChartId);
+      targetSpec = version?.spec ?? null;
+    }
+
+    const system = buildSystemPrompt();
+    const userPrompt = buildRunUserPrompt({
+      kind: run.kind,
+      schema,
+      userPrompt: userPromptText,
+      targetChartId: run.targetChartId,
+      targetChartSpec: targetSpec,
+    });
+
+    const { model, modelId } = createModel({
+      LLM_PROVIDER: process.env.LLM_PROVIDER,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
+    });
+
+    const toolCtx: ToolContext = {
+      db: deps.db,
+      sql: deps.sql,
+      redis: deps.redis,
+      getDataClient: deps.getDataClient,
+      actor: { userId: run.createdBy, orgId: run.organizationId, role: "editor" },
+      agentRunId: runId,
+      defaultDashboardId: run.dashboardId,
+      requestId: runId,
+    };
+
+    const result = streamText({
+      model,
+      system,
+      messages: [{ role: "user" as const, content: userPrompt }],
+      tools: makeTools(toolCtx),
+      stopWhen: stepCountIs(MAX_STEPS),
+      abortSignal: controller.signal,
+      onStepFinish: async (step) => {
+        // Budget + cancel checks happen BETWEEN steps.
+        totalInput += step.usage?.inputTokens ?? 0;
+        totalOutput += step.usage?.outputTokens ?? 0;
+        await persistStep({
+          type: "text",
+          output: { text: step.text ?? "" },
+          inputTokens: step.usage?.inputTokens ?? 0,
+          outputTokens: step.usage?.outputTokens ?? 0,
+        });
+        await publish("usage", {
+          inputTokens: totalInput,
+          outputTokens: totalOutput,
+          costUsd: modelId === "mock-scripted" ? 0 : undefined,
+        });
+        if (totalInput + totalOutput > deps.tokenBudget) {
+          budgetExceeded = true;
+          controller.abort();
+          return;
+        }
+        if (await isCancelRequested(deps.db, runId)) {
+          cancelHit = true;
+          controller.abort();
+        }
+      },
+    });
+
+    for await (const part of result.fullStream) {
+      if (part.type === "text-delta") {
+        const delta = (part as { delta?: string }).delta ?? "";
+        assistantText += delta;
+        await publish("text", { delta });
+      } else if (part.type === "tool-call") {
+        const p = part as unknown as { toolCallId: string; toolName: string; input: unknown };
+        await persistStep({ type: "tool_call", toolName: p.toolName, input: p.input });
+        await publish("tool_call", { toolName: p.toolName, input: p.input });
+      } else if (part.type === "tool-result") {
+        const p = part as unknown as {
+          toolCallId: string;
+          toolName: string;
+          input: unknown;
+          output: unknown;
+        };
+        await persistStep({
+          type: "tool_result",
+          toolName: p.toolName,
+          input: p.input,
+          output: p.output,
+        });
+        await publish("tool_result", { toolName: p.toolName, output: p.output });
+        if (p.toolName === "create_chart_spec" && p.output && typeof p.output === "object") {
+          const out = p.output as { chartId?: string; versionId?: string; version?: number };
+          if (out.chartId) {
+            await publish("chart", {
+              chartId: out.chartId,
+              versionId: out.versionId,
+              version: out.version,
+            });
+          }
+        }
+      } else if (part.type === "tool-error") {
+        // Tool execution or input-validation errors are surfaced to the model
+        // as feedback so it can retry with corrected arguments.
+        const p = part as unknown as { toolCallId: string; toolName: string; input: unknown; error: unknown };
+        const message = p.error instanceof Error ? p.error.message : String(p.error);
+        await persistStep({
+          type: "tool_result",
+          toolName: p.toolName,
+          input: p.input,
+          output: { error: message.slice(0, 500) },
+        });
+        await publish("tool_result", { toolName: p.toolName, output: { error: message.slice(0, 500) } });
+      } else if (part.type === "error") {
+        const p = part as unknown as { error: unknown };
+        const message = p.error instanceof Error ? p.error.message : String(p.error);
+        await persistStep({ type: "error", output: { message: message.slice(0, 500) } });
+        await publish("error", { message: message.slice(0, 500) });
+      }
+    }
+
+    const finalUsage = await result.usage;
+    totalInput = finalUsage?.inputTokens ?? totalInput;
+    totalOutput = finalUsage?.outputTokens ?? totalOutput;
+
+    // Persist the assistant reply for the conversation history.
+    if (assistantText.length > 0) {
+      await deps.db.insert(messages).values({
+        conversationId: run.conversationId,
+        role: "assistant",
+        content: assistantText,
+        runId,
+      });
+    }
+
+    if (cancelHit || (await isCancelRequested(deps.db, runId))) {
+      await finishRun("cancelled");
+      await publish("done", { status: "cancelled" });
+      return;
+    }
+    if (budgetExceeded) {
+      const msg = `Token budget exceeded (${totalInput}+${totalOutput} > ${deps.tokenBudget})`;
+      await finishRun("failed", msg);
+      await publish("error", { message: msg });
+      await publish("done", { status: "failed" });
+      return;
+    }
+
+    await finishRun("succeeded");
+    await publish("done", { status: "succeeded" });
+  } catch (e) {
+    if (budgetExceeded) {
+      const msg = `Token budget exceeded (${totalInput}+${totalOutput} > ${deps.tokenBudget})`;
+      await finishRun("failed", msg);
+      await publish("error", { message: msg });
+      await publish("done", { status: "failed" });
+      return;
+    }
+    if (controller.signal.aborted) {
+      await finishRun("cancelled");
+      await publish("done", { status: "cancelled" });
+      return;
+    }
+    const message = e instanceof Error ? e.message : "Run failed";
+    log.error({ err: e, runId }, "agent run failed");
+    await finishRun("failed", message.slice(0, 500));
+    await publish("error", { message: message.slice(0, 500) });
+    await publish("done", { status: "failed" });
+  }
+}

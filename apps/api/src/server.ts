@@ -46,6 +46,7 @@ async function main(): Promise<void> {
   const ingestionQueue = new Queue("ingestion", {
     connection: redis,
   });
+  const agentRunQueue = new Queue("agent-run", { connection: redis });
 
   const dataClients = new Map<string, DataClient>();
   const getDataClient = (): DataClient => {
@@ -65,6 +66,9 @@ async function main(): Promise<void> {
       redis,
       auth,
       getDataClient,
+      enqueueAgentRun: async (runId) => {
+        await agentRunQueue.add("run", { runId }, { jobId: `agent-run-${runId}`, removeOnComplete: 200, removeOnFail: 200 });
+      },
       resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
     },
     {

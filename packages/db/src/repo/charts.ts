@@ -252,3 +252,12 @@ export async function removeFromDashboard(db: DbLike, dashboardId: string, chart
       and(eq(dashboardCharts.dashboardId, dashboardId), eq(dashboardCharts.chartId, chartId)),
     );
 }
+
+/** Dashboards a chart is placed on (for live events). */
+export async function getDashboardPlacements(db: DbLike, chartId: string): Promise<string[]> {
+  const rows = await db
+    .select({ dashboardId: dashboardCharts.dashboardId })
+    .from(dashboardCharts)
+    .where(eq(dashboardCharts.chartId, chartId));
+  return rows.map((r) => r.dashboardId);
+}

@@ -6,6 +6,7 @@ import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import { AnimatePresence, motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import { ChartRenderer } from "@/components/chart-renderer";
+import { AgentPanel } from "@/components/agent-panel";
 import type { ChartSpec } from "@graphite/chart-spec";
 
 const CHART_TYPES = ["bar", "line", "area", "pie", "histogram"] as const;
@@ -43,6 +44,7 @@ export default function DashboardPage({
   const [conflict, setConflict] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [historyChartId, setHistoryChartId] = useState<string | null>(null);
+  const [remakeChartId, setRemakeChartId] = useState<string | null>(null);
 
   const charts = dashboardQuery.data?.charts ?? [];
   const layoutVersion = dashboardQuery.data?.layout.layoutVersion ?? 1;
@@ -96,7 +98,8 @@ export default function DashboardPage({
   });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
+    <div className="flex h-full">
+      <div className="mx-auto max-w-7xl flex-1 space-y-4 px-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <Link
@@ -162,6 +165,7 @@ export default function DashboardPage({
                     versionNumber={c.version?.versionNumber ?? 0}
                     onRemove={() => removeChart.mutate({ dashboardId, chartId: c.chart.id })}
                     onHistory={() => setHistoryChartId(c.chart.id)}
+                    onRemake={() => setRemakeChartId(c.chart.id)}
                   />
                 </motion.div>
               ))}
@@ -201,6 +205,13 @@ export default function DashboardPage({
           />
         )}
       </AnimatePresence>
+
+      </div>
+      <AgentPanel
+        dashboardId={dashboardId}
+        remakeChartId={remakeChartId}
+        onClearRemake={() => setRemakeChartId(null)}
+      />
     </div>
   );
 }
@@ -212,6 +223,7 @@ function ChartCard({
   versionNumber,
   onRemove,
   onHistory,
+  onRemake,
 }: {
   chartId: string;
   title: string;
@@ -219,6 +231,7 @@ function ChartCard({
   versionNumber: number;
   onRemove: () => void;
   onHistory: () => void;
+  onRemake: () => void;
 }) {
   const dataQuery = trpc.chart.data.useQuery({ chartId });
   const getQuery = trpc.chart.get.useQuery({ chartId });
@@ -236,6 +249,9 @@ function ChartCard({
         <div className="flex items-center gap-2 text-xs">
           <button onClick={onHistory} className="text-zinc-500 underline hover:text-zinc-300">
             history
+          </button>
+          <button onClick={onRemake} className="text-zinc-500 underline hover:text-emerald-300">
+            re-make
           </button>
           <button onClick={onRemove} className="text-zinc-500 underline hover:text-red-400">
             remove

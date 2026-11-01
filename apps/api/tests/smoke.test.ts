@@ -26,6 +26,9 @@ function makeDeps(): AppDeps {
     getDataClient: () => {
       throw new Error("data service not available in this test");
     },
+    enqueueAgentRun: async () => {
+      throw new Error("agent runs not available in this test");
+    },
     resolveMembershipRole: async () => null,
   };
 }

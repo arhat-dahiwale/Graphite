@@ -20,6 +20,8 @@ export interface AppDeps {
   auth?: GraphiteAuth;
   /** gRPC client factory for the data service (chart.data queries). */
   getDataClient: () => DataClient;
+  /** Enqueue an agent run for processing by the agent-run worker. */
+  enqueueAgentRun: (runId: string) => Promise<void>;
   /** Resolve membership role for a user within an org (repo-backed). */
   resolveMembershipRole: (
     user: SessionUser,
@@ -38,6 +40,8 @@ export interface Context {
   getDataClient: () => DataClient;
   /** Actor (membership role) of the session user within an org, or null. */
   actorFor: (orgId: string) => Promise<Actor | null>;
+  /** Enqueue an agent run (delegates to the injected queue). */
+  enqueueAgentRun: (runId: string) => Promise<void>;
 }
 
 /**
@@ -45,7 +49,7 @@ export interface Context {
  * auth middleware; `actorFor` lazily resolves the membership role per org.
  */
 export function createContext(
-  deps: Pick<AppDeps, "db" | "sql" | "redis" | "getDataClient" | "resolveMembershipRole">,
+  deps: Pick<AppDeps, "db" | "sql" | "redis" | "getDataClient" | "enqueueAgentRun" | "resolveMembershipRole">,
   opts: { requestId: string; headers: IncomingHttpHeaders; user: SessionUser | null },
 ): Context {
   const { user } = opts;
@@ -57,6 +61,7 @@ export function createContext(
     sql: deps.sql,
     redis: deps.redis,
     getDataClient: deps.getDataClient,
+    enqueueAgentRun: deps.enqueueAgentRun,
     actorFor: async (orgId: string) => {
       if (!user) return null;
       const role = await deps.resolveMembershipRole(user, orgId);

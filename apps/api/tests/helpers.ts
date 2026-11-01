@@ -10,6 +10,7 @@ import { ServerCredentials } from "@grpc/grpc-js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startIngestionWorker } from "../../../apps/worker/src/queues/ingestion.js";
+import { startAgentRunWorker } from "../../../apps/worker/src/queues/agent-run.js";
 import { createDataClient, type DataClient } from "@graphite/data/client";
 import type { Worker as BullWorker } from "bullmq";
 import { createApp } from "../src/app.js";
@@ -43,7 +44,9 @@ export interface TestApp {
   close: () => Promise<void>;
 }
 
-export async function startTestApp(): Promise<TestApp> {
+export async function startTestApp(
+  opts?: { agentTokenBudget?: number; redisDb?: number },
+): Promise<TestApp> {
   loadEnv();
   const adminUrl = requireEnv("DATABASE_ADMIN_URL");
   const u = new URL(adminUrl);
@@ -58,7 +61,7 @@ export async function startTestApp(): Promise<TestApp> {
   const redis = new RedisClient(process.env.REDIS_URL ?? "redis://localhost:6380", {
     maxRetriesPerRequest: null,
   });
-  redis.select(TEST_REDIS_DB);
+  redis.select(opts?.redisDb ?? TEST_REDIS_DB);
   await redis.flushdb();
 
   // Clean state: truncate every table in the test database.
@@ -105,6 +108,7 @@ export async function startTestApp(): Promise<TestApp> {
   });
 
   const ingestionQueue = new Queue("ingestion", { connection: redis });
+  const agentRunQueue = new Queue("agent-run", { connection: redis });
   const worker: BullWorker = startIngestionWorker({
     connection: redis,
     db,
@@ -113,16 +117,34 @@ export async function startTestApp(): Promise<TestApp> {
     bucket: TEST_BUCKET,
     concurrency: 2,
   });
+  const agentWorker: BullWorker = startAgentRunWorker({
+    connection: redis,
+    db,
+    sql,
+    getDataClient: () => {
+      dataClientLazy ??= createDataClient(`127.0.0.1:${dataPort}`);
+      return dataClientLazy;
+    },
+    tokenBudget: opts?.agentTokenBudget ?? Number(process.env.AGENT_TOKEN_BUDGET ?? 200_000),
+    concurrency: 2,
+  });
 
-  let dataClient: DataClient | null = null;
+  let dataClientLazy: DataClient | null = null;
   const deps: AppDeps = {
     db,
     sql,
     redis,
     auth,
     getDataClient: () => {
-      dataClient ??= createDataClient(`127.0.0.1:${dataPort}`);
-      return dataClient;
+      dataClientLazy ??= createDataClient(`127.0.0.1:${dataPort}`);
+      return dataClientLazy;
+    },
+    enqueueAgentRun: async (runId) => {
+      await agentRunQueue.add(
+        "run",
+        { runId },
+        { jobId: `agent-run-${runId}`, removeOnComplete: 200, removeOnFail: 200 },
+      );
     },
     resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
   };
@@ -156,7 +178,9 @@ export async function startTestApp(): Promise<TestApp> {
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await worker.close();
+      await agentWorker.close();
       await ingestionQueue.close();
+      await agentRunQueue.close();
       grpcServer.tryShutdown(() => undefined);
       readonlyDb.sql.end();
       redis.disconnect();

@@ -5,7 +5,9 @@ import { createDb } from "@graphite/db/client";
 import express from "express";
 import Redis from "ioredis";
 import { createStorage, ensureBucket } from "@graphite/storage";
+import { createDataClient, type DataClient } from "@graphite/data/client";
 import { startIngestionWorker } from "./queues/ingestion";
+import { startAgentRunWorker } from "./queues/agent-run";
 
 loadRootEnv();
 const log = childLogger({ component: "worker" });
@@ -26,6 +28,13 @@ const envSchema = z.object({
     .default("true")
     .transform((v) => v !== "false"),
   INGESTION_CONCURRENCY: z.coerce.number().int().default(1),
+  AGENT_TOKEN_BUDGET: z.coerce.number().int().default(200_000),
+  AGENT_RUN_CONCURRENCY: z.coerce.number().int().default(2),
+  LLM_PROVIDER: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().optional(),
+  DATA_GRPC_HOST: z.string().default("127.0.0.1"),
+  DATA_GRPC_PORT: z.string().default("50051"),
 });
 
 const env = parseEnv(envSchema);
@@ -45,6 +54,12 @@ async function main(): Promise<void> {
   });
   await ensureBucket(storage, env.S3_BUCKET);
 
+  const dataClients = new Map<string, never>();
+  void dataClients;
+  const dataGrpcHost = process.env.DATA_GRPC_HOST ?? "127.0.0.1";
+  const dataGrpcPort = process.env.DATA_GRPC_PORT ?? "50051";
+  let dataClient: DataClient | null = null;
+
   const workers = [
     startIngestionWorker({
       connection: redis,
@@ -53,6 +68,17 @@ async function main(): Promise<void> {
       storage,
       bucket: env.S3_BUCKET,
       concurrency: env.INGESTION_CONCURRENCY,
+    }),
+    startAgentRunWorker({
+      connection: redis,
+      db,
+      sql,
+      getDataClient: () => {
+        dataClient ??= createDataClient(`${dataGrpcHost}:${dataGrpcPort}`);
+        return dataClient;
+      },
+      tokenBudget: env.AGENT_TOKEN_BUDGET,
+      concurrency: env.AGENT_RUN_CONCURRENCY,
     }),
   ];
 

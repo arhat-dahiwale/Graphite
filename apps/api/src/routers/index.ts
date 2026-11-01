@@ -6,6 +6,7 @@ import { projectRouter } from "./project";
 import { datasetRouter } from "./dataset";
 import { dashboardRouter } from "./dashboard";
 import { chartRouter } from "./chart";
+import { runRouter } from "./run";
 
 export const appRouter = router({
   hello: helloRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   dataset: datasetRouter,
   dashboard: dashboardRouter,
   chart: chartRouter,
+  run: runRouter,
 });
 
 export type AppRouter = typeof appRouter;

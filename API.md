@@ -218,10 +218,13 @@ OAuth sign-in (Google/GitHub) is active only when the corresponding client id/se
 ### `run` (agent)
 | Procedure | Type | Role | Description |
 |---|---|---|---|
-| `start` | mutation | editor | Input: `{ dashboardId, datasetId?, kind, prompt, targetChartId? }`. Returns `{ runId }` |
-| `get` | query | viewer | Run detail with steps |
-| `list` | query | viewer | Runs for a dashboard or org |
-| `conversation` | query | viewer | Messages for a dashboard |
+| `start` | mutation | editor | Input: `{ dashboardId, datasetId?, kind, prompt, targetChartId? }`. Creates the conversation (one per dashboard+user), persists the user message, enqueues the `agent-run` job, returns `{ runId, conversationId }` |
+| `get` | query | viewer | `{ run, steps[] }` for a run |
+| `list` | query | viewer | Runs for a dashboard (latest 50) |
+| `cancel` | mutation | editor | Sets `cancel_requested`; the orchestrator stops between steps |
+| `conversation` | query | viewer | `{ conversationId, messages[] }` for the dashboard+caller |
+
+Agent runs execute in the `agent-run` BullMQ queue with a concurrency limit. The model is selected by `LLM_PROVIDER` (`mock-scripted` by default; `anthropic` when a key is configured). Run events stream over `GET /api/v1/runs/:runId/events` (SSE) fed by Redis pub/sub. Every run is labeled with its model in `agent_runs.model` — `mock-scripted` runs are deterministic test scripts, not real model output.
 
 ### `integration`
 `listTokens`, `createToken`, `revokeToken`, `listClients` (wrappers matching the REST endpoints for the UI).

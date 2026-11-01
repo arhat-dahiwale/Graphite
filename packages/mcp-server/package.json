@@ -1,0 +1,32 @@
+{
+  "name": "@graphite/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tools": "./src/tools/index.ts",
+    "./context": "./src/context.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@graphite/chart-spec": "workspace:*",
+    "@graphite/core": "workspace:*",
+    "@graphite/data": "workspace:*",
+    "@graphite/db": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "ioredis": "^6.0.0",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^10.14.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  }
+}

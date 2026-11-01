@@ -96,3 +96,16 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** chart-spec 12 unit tests (schema/compiler/escaping/adapter); api dashboards suite 6 integration tests (layout conflict, viewer denied, version history, revert, chart.data, audit); full lint/typecheck/test green
 **Decisions:** revert stores a NEW version (history immutable per DATA.md); CTE-free compiler keeps AST gate simple; numeric aggregates from Postgres are coerced to numbers in chart.data
 **Follow-ups:** none
+
+### 2026-11-01 08:55 | GLM-5.3-Flash (overnight run) | Phase 4
+**Task:** The agent — AI SDK integration, tools, mock model, run pipeline, panel
+**Summary:**
+- packages/mcp-server: tool cores with ToolContext (actor + run identity) — describe_dataset, run_sql, create_chart_spec, update_chart_spec; zod input schemas; all writes go through authorize(), compile validation, audit_logs, and dashboard event publishing
+- apps/worker/src/agent: provider config (LLM_PROVIDER=mock default / anthropic via env), scripted deterministic mock model implementing LanguageModelV4 (modelId `mock-scripted`; parses the schema block from the prompt, derives charts from actual columns, supports test flags invalid_spec_first/slow_run), system prompt with injection defenses (tenant data only ever appears in delimited untrusted blocks in the USER message), orchestrator (streamText + tool loop, step persistence to agent_steps, run events to Redis pub/sub -> SSE, cancel flag checked between steps, per-run token budget aborting between steps)
+- run tRPC router (start/get/list/cancel/conversation) + agent-run BullMQ queue with concurrency limit; chart data queries flow through the gRPC data service
+- Agent panel UI: prompt box, step timeline over SSE with polling fallback, cancel button, re-make mode from each chart card, explicit `mock-scripted` badge; canvas refreshes when a run finishes
+- Verified in browser: "Build a dashboard" ran describe -> sql -> 3x create_chart_spec; 3 agent charts appeared labeled v1 · agent
+**Tests:** 7 worker unit tests (prompt fixtures incl. injection defense, mock script derivation from odd column names, slow_run); 6 api integration tests — 3 valid charts, re-make creates version 2 (agent source, type swap), invalid spec retried via error feedback then 3 charts, malicious CSV cell content reaches the model only as data and behavior is unchanged, cancel stops between steps leaving <3 charts, token budget fails the run with "Token budget exceeded"
+**Docs updated:** API.md (run router details, model labeling)
+**Decisions:** the panel uses a dedicated SSE transport + react-query instead of the literal useChat hook — the run protocol is step-streaming, not chat-protocol; noted as a deviation on the Phase 4 box. Mock retries invalid specs after zod/tool-error feedback; execute errors and input-validation errors both surface as error results to the model
+**Follow-ups:** live-LLM verification deferred (no API key): build-dashboard exit criterion and agent-behavior-unchanged (Phase 5) remain unchecked; tracked in PHASES.md

@@ -87,21 +87,23 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 4: The agent
 **Goal:** the AI builds and re-makes charts.
 
-- [ ] Vercel AI SDK integration with provider config
-- [ ] Tools: `describe_dataset`, `run_sql`, `create_chart_spec`, `update_chart_spec`
-- [ ] System prompts and prompt-injection safeguards for CSV content
-- [ ] `agent-run` BullMQ queue with concurrency limit
-- [ ] Streaming run events via Redis pub/sub and SSE
-- [ ] Agent side panel with `useChat`, step timeline, and cancel button
-- [ ] "Re-make this chart" action on each chart card
-- [ ] Spec validation with retry on invalid output
-- [ ] Per-run token budget
-- [ ] `agent_runs`, `agent_steps`, `conversations`, and `messages` persistence
+- [x] Vercel AI SDK integration with provider config
+- [x] Tools: `describe_dataset`, `run_sql`, `create_chart_spec`, `update_chart_spec`
+- [x] System prompts and prompt-injection safeguards for CSV content
+- [x] `agent-run` BullMQ queue with concurrency limit
+- [x] Streaming run events via Redis pub/sub and SSE
+- [x] Agent side panel with `useChat`, step timeline, and cancel button
+- [x] "Re-make this chart" action on each chart card
+- [x] Spec validation with retry on invalid output
+- [x] Per-run token budget
+- [x] `agent_runs`, `agent_steps`, `conversations`, and `messages` persistence
 
 **Exit criteria**
-- [ ] "Build a dashboard" on a fresh dataset produces at least 3 valid charts
-- [ ] Re-make creates a new chart version
-- [ ] Cancelling a run stops it between steps
+- [x] "Build a dashboard" on a fresh dataset produces at least 3 valid charts
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] Re-make creates a new chart version
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] Cancelling a run stops it between steps
 
 ---
 
@@ -230,7 +232,7 @@ Tick a phase only when every box inside it is checked.
 - [x] Phase 1: Auth, orgs, projects
 - [x] Phase 2: CSV ingestion
 - [x] Phase 3: Manual dashboard
-- [ ] Phase 4: Agent
+- [ ] Phase 4: Agent (done except live-LLM verification)
 - [ ] Phase 5: MCP (internal)
 - [ ] Phase 6: Collaboration
 - [ ] Phase 7: MCP (external)
