@@ -28,6 +28,17 @@ export const envSchema = limitsSchema
     DATA_GRPC_HOST: z.string().default("127.0.0.1"),
     DATA_GRPC_PORT: z.coerce.number().int().default(50051),
     WORKER_INTERNAL_MCP_URL: z.string().default("http://127.0.0.1:4100"),
+    // Comma-separated explicit browser origins for CORS and Socket.IO.
+    // "*" is rejected: credentials (cookies) are always enabled.
+    CORS_ORIGINS: z
+      .string()
+      .refine(
+        (v) => !v.split(",").map((s) => s.trim()).includes("*"),
+        { message: "CORS_ORIGINS cannot contain '*' (credentials are enabled)" },
+      )
+      .optional(),
+    // Signs/verifies the internal MCP identity headers when the API mounts MCP.
+    INTERNAL_MCP_SECRET: z.string().min(32).optional(),
   });
 
 export type Env = z.output<typeof envSchema>;

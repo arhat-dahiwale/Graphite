@@ -62,3 +62,33 @@ export const limitsSchema = z.object({
 });
 
 export type LimitsEnv = z.output<typeof limitsSchema>;
+
+/**
+ * Browser origins allowed to call the API (Express CORS and the Socket.IO
+ * server). Credentials are enabled, so a wildcard "*" is rejected: callers
+ * must list explicit origins, comma-separated, via CORS_ORIGINS.
+ */
+export const DEFAULT_CORS_ORIGINS: readonly string[] = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+export function parseAllowedOrigins(raw: string | undefined): string[] {
+  if (raw === undefined || raw.trim() === "") {
+    return [...DEFAULT_CORS_ORIGINS];
+  }
+  const origins = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (origins.includes("*")) {
+    throw new Error(
+      "CORS_ORIGINS cannot contain '*': credentials are enabled, list explicit origins " +
+        "(e.g. http://localhost:3000,https://app.example.com).",
+    );
+  }
+  if (origins.length === 0) {
+    throw new Error("CORS_ORIGINS is set but empty after parsing; list explicit origins.");
+  }
+  return origins;
+}

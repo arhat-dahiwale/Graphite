@@ -3,6 +3,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import type Redis from "ioredis";
 import { z } from "zod";
 import { childLogger, dashboardEventsChannel } from "@graphite/core";
+import { parseAllowedOrigins } from "@graphite/core/config";
 import type { Database } from "@graphite/db/client";
 import { dashboards } from "@graphite/db/schema";
 import { eq } from "drizzle-orm";
@@ -49,7 +50,8 @@ export interface CollabOptions {
   redisSub: Redis;
   db: Database;
   auth?: GraphiteAuth;
-  allowedOrigins: string[];
+  /** Explicit browser origins; defaults to CORS_ORIGINS when omitted. */
+  allowedOrigins?: string[];
 }
 
 interface CollabSocket extends Socket {
@@ -71,9 +73,25 @@ interface CollabSocket extends Socket {
  *   `dash:{id}:events` Redis channel and are relayed to the room.
  */
 export function setupCollab(opts: CollabOptions): SocketServer {
+  const allowedOrigins = opts.allowedOrigins ?? parseAllowedOrigins(process.env.CORS_ORIGINS);
   const io = new SocketServer(opts.httpServer, {
     path: "/socket.io",
-    cors: { origin: opts.allowedOrigins, credentials: true },
+    // Same explicit origin list as Express CORS (CORS_ORIGINS when not passed).
+    cors: {
+      origin: allowedOrigins,
+      credentials: true,
+    },
+    // cors only withholds headers; this actually aborts handshakes from
+    // disallowed origins. Missing Origin (non-browser clients, e.g. tests
+    // and internal monitors) is allowed — session auth still applies.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      if (typeof origin !== "string" || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback("origin not allowed", false);
+    },
   });
   io.adapter(createAdapter(opts.redis, opts.redisSub));
   void opts.redisSub;

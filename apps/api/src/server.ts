@@ -1,5 +1,5 @@
 import { childLogger } from "@graphite/core";
-import { loadRootEnv } from "@graphite/core/config";
+import { loadRootEnv, parseAllowedOrigins } from "@graphite/core/config";
 import { createDb } from "@graphite/db/client";
 import { getMembership } from "@graphite/db/repo/members";
 import { Queue } from "bullmq";
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
       resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
     },
     {
-      allowedOrigins: [env.WEB_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
+      allowedOrigins: parseAllowedOrigins(env.CORS_ORIGINS),
       rest: {
         storage,
         bucket: env.S3_BUCKET,
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
     redisSub: subRedis,
     db,
     auth,
-    allowedOrigins: [env.WEB_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
+    allowedOrigins: parseAllowedOrigins(env.CORS_ORIGINS),
   });
 
   const shutdown = (): void => {

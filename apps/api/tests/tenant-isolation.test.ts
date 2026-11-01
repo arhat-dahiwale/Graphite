@@ -22,7 +22,6 @@ import {
 let app: TestApp;
 let alice: string;
 let bob: string;
-let aliceId = "";
 let bobId = "";
 let orgAId = "";
 let orgBId = "";
@@ -64,8 +63,6 @@ beforeAll(async () => {
   orgBId = orgB.id;
   const project = await trpc<{ id: string }>(app.baseUrl, alice, "project.create", { orgId: orgAId, name: "Iso Project" }, "mutation");
   projectId = project.id;
-  const membersA = await trpc<Array<{ userId: string; email: string }>>(app.baseUrl, alice, "member.list", { orgId: orgAId });
-  aliceId = membersA.find((m) => m.email === "iso-alice@test.example")!.userId;
   const membersB = await trpc<Array<{ userId: string; email: string }>>(app.baseUrl, bob, "member.list", { orgId: orgBId });
   bobId = membersB.find((m) => m.email === "iso-bob@test.example")!.userId;
 
@@ -177,7 +174,6 @@ describe("MCP tools: cross-tenant access fails (org B identity vs org A resource
 
   it("create_chart_spec fails and creates nothing", async () => {
     const before = await app.db.execute(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (await import("drizzle-orm")).sql`SELECT count(*)::int AS n FROM charts`,
     ) as unknown as Array<{ n: number }>;
     await withBobClient(async (c) => {
@@ -185,7 +181,6 @@ describe("MCP tools: cross-tenant access fails (org B identity vs org A resource
       expect(text).toContain("Dataset not found");
     });
     const after = await app.db.execute(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (await import("drizzle-orm")).sql`SELECT count(*)::int AS n FROM charts`,
     ) as unknown as Array<{ n: number }>;
     expect(after[0]?.n).toBe(before[0]?.n); // no side effect

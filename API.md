@@ -262,6 +262,8 @@ Namespace: `/collab`. Authentication via session cookie or token at connection. 
 
 Rules: payloads are Zod-validated; unauthorized joins are rejected; viewers may join but their `layout:save` is denied. The server relays `dash:{id}:events` from Redis (published by MCP tools, agent runs, and tRPC) to room sockets, so chart version events reach every instance. Multi-instance deployments share rooms through the Socket.IO Redis adapter. The web client connects to the API origin (Next dev rewrites cannot proxy WebSockets).
 
+Browser origins: `CORS_ORIGINS` (comma-separated explicit origins; a wildcard `*` is rejected because credentials are always enabled) configures both the Express CORS middleware and the Socket.IO handshake. Handshakes from disallowed origins are aborted server-side (`allowRequest`), not just denied by missing headers.
+
 ---
 
 ## 5. gRPC (orchestrator and MCP server to data service)

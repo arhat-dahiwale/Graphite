@@ -102,8 +102,9 @@ function toIdentity(ctx: InternalContext): ResolvedIdentity {
  */
 export function createMcpRouter(deps: McpRouterDeps): Router {
   // Fail fast at mount time: a missing or weak internal secret must stop the
-  // process, not silently weaken identity verification.
-  const secret = assertInternalMcpSecret(deps.secret);
+  // process, not silently weaken identity verification. resolveIdentity reads
+  // the same validated value from deps on every request.
+  assertInternalMcpSecret(deps.secret);
   const router = Router();
 
   const buildServer = (identity: ResolvedIdentity): McpServer => {
@@ -122,7 +123,6 @@ export function createMcpRouter(deps: McpRouterDeps): Router {
       { instructions: "Graphite tools: explore datasets and manage charts on dashboards." },
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const register = (
       name: string,
       description: string,

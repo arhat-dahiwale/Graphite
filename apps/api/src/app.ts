@@ -7,6 +7,7 @@ import express, {
 import cors from "cors";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { isAppError, logger, notFound, withTimeout, type AppError } from "@graphite/core";
+import { parseAllowedOrigins } from "@graphite/core/config";
 import { createContext, type AppDeps, type SessionUser } from "./context";
 import { appRouter } from "./routers/index";
 import { invitationsRestRouter } from "./rest/invitations";
@@ -47,7 +48,9 @@ export function createApp(
   app.disable("x-powered-by");
   app.set("trust proxy", true);
 
-  const origins = opts?.allowedOrigins ?? ["http://localhost:3000", "http://127.0.0.1:3000"];
+  // Explicit, configurable browser origins (CORS_ORIGINS); never a wildcard
+  // because credentials (session cookies) are always enabled.
+  const origins = opts?.allowedOrigins ?? parseAllowedOrigins(process.env.CORS_ORIGINS);
   app.use(
     cors({
       origin: origins,
