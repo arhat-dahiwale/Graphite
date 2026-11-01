@@ -1,12 +1,13 @@
 "use client";
 
-import { use, useCallback, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import { AnimatePresence, motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import { ChartRenderer } from "@/components/chart-renderer";
 import { AgentPanel } from "@/components/agent-panel";
+import { useCollab } from "@/lib/use-collab";
 import type { ChartSpec } from "@graphite/chart-spec";
 
 const CHART_TYPES = ["bar", "line", "area", "pie", "histogram"] as const;
@@ -26,6 +27,27 @@ export default function DashboardPage({
     onSuccess: () => utils.dashboard.get.invalidate({ dashboardId }),
   });
 
+  // Live collaboration: presence, cursors, remote layout writes, agent/MCP
+  // chart events.
+  const collab = useCollab(dashboardId);
+
+  // Reconcile remote layout writes from other users.
+  const lastRemoteVersion = useRef(0);
+  useEffect(() => {
+    const remote = collab.remoteLayout;
+    if (!remote || remote.layoutVersion === lastRemoteVersion.current) return;
+    lastRemoteVersion.current = remote.layoutVersion;
+    baseVersionRef.current = remote.layoutVersion;
+    void utils.dashboard.get.invalidate({ dashboardId });
+  }, [collab.remoteLayout, dashboardId, utils.dashboard.get]);
+
+  // Refresh when agent or MCP runs create/update chart versions.
+  useEffect(() => {
+    if (collab.chartVersionEvent) {
+      void utils.dashboard.get.invalidate({ dashboardId });
+    }
+  }, [collab.chartVersionEvent, dashboardId, utils.dashboard.get]);
+
   const saveLayout = trpc.dashboard.saveLayout.useMutation({
     onSuccess: (result) => {
       if (result.ok) {
@@ -42,6 +64,7 @@ export default function DashboardPage({
 
   const baseVersionRef = useRef(dashboardQuery.data?.layout.layoutVersion ?? 1);
   const [conflict, setConflict] = useState<string | null>(null);
+  void collab;
   const [builderOpen, setBuilderOpen] = useState(false);
   const [historyChartId, setHistoryChartId] = useState<string | null>(null);
   const [remakeChartId, setRemakeChartId] = useState<string | null>(null);

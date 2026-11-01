@@ -127,19 +127,19 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 6: Real-time collaboration
 **Goal:** multi-user live editing.
 
-- [ ] Socket.IO server with Redis adapter
-- [ ] Room join with membership check
-- [ ] Presence (who is viewing)
-- [ ] Live cursors
-- [ ] "Who is moving which chart" indicators
-- [ ] Versioned layout writes with `baseVersion`
-- [ ] Conflict feedback and reconciliation in the UI
-- [ ] Live chart version events, including agent-created charts
+- [x] Socket.IO server with Redis adapter
+- [x] Room join with membership check
+- [x] Presence (who is viewing)
+- [x] Live cursors
+- [x] "Who is moving which chart" indicators
+- [x] Versioned layout writes with `baseVersion`
+- [x] Conflict feedback and reconciliation in the UI
+- [x] Live chart version events, including agent-created charts
 
 **Exit criteria**
-- [ ] Two browsers connected to different API instances stay in sync
-- [ ] Conflict path is covered by a test
-- [ ] Viewers cannot save layout changes
+- [x] Two browsers connected to different API instances stay in sync
+- [x] Conflict path is covered by a test
+- [x] Viewers cannot save layout changes
 
 ---
 
@@ -235,7 +235,7 @@ Tick a phase only when every box inside it is checked.
 - [x] Phase 3: Manual dashboard
 - [ ] Phase 4: Agent (done except live-LLM verification)
 - [ ] Phase 5: MCP (internal) (done except live-LLM verification)
-- [ ] Phase 6: Collaboration
+- [x] Phase 6: Collaboration
 - [ ] Phase 7: MCP (external)
 - [ ] Phase 8: Observability
 - [ ] Phase 9: Kubernetes and CI/CD

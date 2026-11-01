@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { createMcpRouter } from "@graphite/mcp-server/server";
+import { setupCollab } from "../src/collab.js";
 import { startIngestionWorker } from "../../../apps/worker/src/queues/ingestion.js";
 import { startAgentRunWorker } from "../../../apps/worker/src/queues/agent-run.js";
 import { createDataClient, type DataClient } from "@graphite/data/client";
@@ -43,6 +44,11 @@ export interface TestApp {
   ingestionQueue: Queue;
   dataPort: number;
   authSecret: string;
+  auth: ReturnType<typeof createAuth>;
+  storage: ReturnType<typeof createStorage>;
+  maxUploadMb: number;
+  maxQueryRows: number;
+  statementTimeoutMs: number;
   /** Internal MCP server (the agent's only tool source). */
   mcpPort: number;
   mcpSecret: string;
@@ -191,6 +197,19 @@ export async function startTestApp(
   if (!addr || typeof addr === "string") throw new Error("no port");
   const baseUrl = `http://127.0.0.1:${addr.port}`;
 
+  const collabSub = new RedisClient(process.env.REDIS_URL ?? "redis://localhost:6380", {
+    maxRetriesPerRequest: null,
+  });
+  collabSub.select(TEST_REDIS_DB);
+  setupCollab({
+    httpServer: server,
+    redis,
+    redisSub: collabSub,
+    db,
+    auth,
+    allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  });
+
   return {
     baseUrl,
     db,
@@ -199,10 +218,16 @@ export async function startTestApp(
     ingestionQueue,
     dataPort,
     authSecret,
+    auth,
+    storage,
+    maxUploadMb: 50,
+    maxQueryRows: 1000,
+    statementTimeoutMs: 2000,
     mcpPort: mcpAddr.port,
     mcpSecret,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      collabSub.disconnect();
       await worker.close();
       await agentWorker.close();
       await new Promise<void>((resolve) => mcpServer.close(() => resolve()));
@@ -439,4 +464,66 @@ export async function pollUntil<T>(
     if (Date.now() - start > timeoutMs) throw new Error("pollUntil timed out");
     await new Promise((r) => setTimeout(r, intervalMs));
   }
+}
+
+
+/**
+ * Start an additional API instance (own HTTP port, own Socket.IO server with
+ * its own Redis adapter connections) sharing the SAME database and Redis —
+ * the multi-instance deployment shape.
+ */
+let dataClientLazy: DataClient | null = null;
+
+export async function startSecondInstance(app: TestApp): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const { createApp } = await import("../src/app.js");
+  const { setupCollab } = await import("../src/collab.js");
+  const subRedis = new RedisClient(process.env.REDIS_URL ?? "redis://localhost:6380", {
+    maxRetriesPerRequest: null,
+  });
+  subRedis.select(TEST_REDIS_DB);
+
+  const deps: AppDeps = {
+    db: app.db,
+    sql: app.sql,
+    redis: app.redis,
+    auth: app.auth,
+    getDataClient: () => {
+      dataClientLazy ??= createDataClient(`127.0.0.1:${app.dataPort}`);
+      return dataClientLazy;
+    },
+    enqueueAgentRun: async (runId) => {
+      await app.redis.select(0).catch(() => undefined);
+      // Enqueue through the same Redis the first instance's queue uses.
+      const { Queue } = await import("bullmq");
+      const q = new Queue("agent-run", { connection: app.redis });
+      await q.add("run", { runId }, { jobId: `agent-run-${runId}`, removeOnComplete: 200, removeOnFail: 200 });
+      await q.close();
+    },
+    resolveMembershipRole: async (user, orgId) => getMembership(app.db, orgId, user.id),
+  };
+  const { app: expressApp } = createApp(deps, {
+    allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  });
+  const server = expressApp.listen(0);
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw new Error("no port");
+  const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+  setupCollab({
+    httpServer: server,
+    redis: app.redis,
+    redisSub: subRedis,
+    db: app.db,
+    auth: app.auth,
+    allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  });
+
+  return {
+    baseUrl,
+    close: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      subRedis.disconnect();
+    },
+  };
 }

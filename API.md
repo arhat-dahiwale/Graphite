@@ -260,7 +260,7 @@ Namespace: `/collab`. Authentication via session cookie or token at connection. 
 | `chart:added` / `chart:removed` | `{ chartId }` | Dashboard membership changes |
 | `run:status` | `{ runId, status }` | Agent run lifecycle |
 
-Rules: payloads are Zod-validated; unauthorized joins are rejected; viewers may join but their `layout:save` is denied.
+Rules: payloads are Zod-validated; unauthorized joins are rejected; viewers may join but their `layout:save` is denied. The server relays `dash:{id}:events` from Redis (published by MCP tools, agent runs, and tRPC) to room sockets, so chart version events reach every instance. Multi-instance deployments share rooms through the Socket.IO Redis adapter. The web client connects to the API origin (Next dev rewrites cannot proxy WebSockets).
 
 ---
 

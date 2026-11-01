@@ -121,3 +121,16 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Docs updated:** API.md (MCP tools/auth), ARCHITECTURE.md (orchestrator via MCP)
 **Decisions:** stateless MCP mode (no sessions) per ARCHITECTURE tradeoffs; AI SDK v7 requires the separate @ai-sdk/mcp client package
 **Follow-ups:** live-LLM verification of "agent behavior unchanged" deferred (tracked in PHASES.md)
+
+### 2026-11-01 10:40 | GLM-5.3-Flash (overnight run) | Phase 6
+**Task:** Real-time collaboration — Socket.IO, presence, cursors, layout sync
+**Summary:**
+- apps/api/src/collab.ts: Socket.IO namespace /collab with the Redis adapter (createAdapter over two connections); session auth middleware on handshake; dashboard:join with membership check (NOT_FOUND for non-members, role returned in ack)
+- Presence in a Redis hash (TTL 60s, refreshed on updates) with presence:state snapshots on join/leave/update/disconnect; cursor:move relay throttled to ~30 Hz per connection; chart:drag indicators relayed with start/move/end state
+- layout:save over sockets: Zod-validated, editor-only (viewer FORBIDDEN ack), same saveLayout repo with baseVersion optimistic concurrency; layout:updated broadcast to the room on success, layout:conflict emitted only to the stale writer
+- Redis relay: dash:{id}:events published by MCP tools / agent runs / tRPC are psubscribe'd and re-emitted to room sockets (chart:version-created etc.), so agent-created charts appear live
+- UI: useCollab hook (socket lifecycle, presence, cursors, drag indicators, remote layout reconciliation invalidating dashboard.get, chart version events) wired into the dashboard page
+**Tests:** 6 collab integration tests — event on instance A reaches client on instance B (two API instances, own adapter connections, shared Redis), MCP-published chart:version-created reaches sockets, stale baseVersion gets layout:conflict with current layout, viewer layout:save denied, non-member join rejected, layout persisted with bumped layout_version
+**Docs updated:** API.md (relay + multi-instance + client origin note)
+**Decisions:** own writes go over tRPC saveLayout (same semantics, conflict banner) while sockets carry broadcasts; web client points at the API origin because Next dev rewrites cannot proxy WebSockets
+**Follow-ups:** none

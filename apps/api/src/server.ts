@@ -5,6 +5,8 @@ import { getMembership } from "@graphite/db/repo/members";
 import { Queue } from "bullmq";
 import { createStorage, ensureBucket } from "@graphite/storage";
 import { createDataClient, type DataClient } from "@graphite/data/client";
+import type { Server as HttpServer } from "node:http";
+import { setupCollab } from "./collab.js";
 import { createApp } from "./app";
 import { createAuth } from "./auth";
 import { env } from "./env";
@@ -87,6 +89,18 @@ async function main(): Promise<void> {
 
   const server = app.listen(env.API_PORT, () => {
     log.info({ port: env.API_PORT }, "graphite api listening");
+  });
+
+  // Real-time collaboration (Socket.IO with the Redis adapter).
+  const subRedis = createRedis(env.REDIS_URL);
+  await subRedis.connect();
+  setupCollab({
+    httpServer: server as HttpServer,
+    redis,
+    redisSub: subRedis,
+    db,
+    auth,
+    allowedOrigins: [env.WEB_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
   });
 
   const shutdown = (): void => {
