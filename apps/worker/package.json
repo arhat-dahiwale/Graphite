@@ -13,6 +13,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
     "@aws-sdk/lib-storage": "^3.1161.0",
+    "@graphite/chart-spec": "workspace:*",
     "@graphite/core": "workspace:*",
     "@graphite/db": "workspace:*",
     "@graphite/storage": "workspace:*",

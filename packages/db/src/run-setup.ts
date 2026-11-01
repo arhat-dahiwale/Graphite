@@ -1,6 +1,6 @@
-import { loadRootEnv } from "./env.js";
-import { ensureDatabase, setupDatabase } from "./setup.js";
-import { runMigrations } from "./migrate.js";
+import { loadRootEnv } from "./env";
+import { ensureDatabase, setupDatabase } from "./setup";
+import { runMigrations } from "./migrate";
 
 const TEST_DB_NAME = "graphite_test";
 

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
-import type { DbLike } from "../client.js";
-import { invitations, members, type Invitation, type MemberRole } from "../schema/index.js";
+import type { DbLike } from "../client";
+import { invitations, members, type Invitation, type MemberRole } from "../schema/index";
 
 const INVITE_TTL_DAYS = 7;
 

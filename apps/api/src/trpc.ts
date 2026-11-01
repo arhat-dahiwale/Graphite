@@ -1,6 +1,6 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import { AppError, type Actor } from "@graphite/core";
-import type { Context } from "./context.js";
+import type { Context } from "./context";
 
 const t = initTRPC.context<Context>().create();
 

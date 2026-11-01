@@ -57,7 +57,7 @@ flowchart LR
 
 ### 3.1 apps/web (Next.js)
 - App Router; server components for shells and public shared dashboards; client components for the editor.
-- **Canvas**: react-grid-layout or dnd-kit for positions and sizes; Framer Motion `layout` animations for swaps and reflow.
+- **Canvas**: react-grid-layout v2 (hook-based container width, `dragConfig`/`resizeConfig`) for positions and sizes; Framer Motion `layout` animations for swaps and reflow.
 - **Charts**: ECharts renders a `ChartSpec` through a single `specToEChartsOption()` adapter.
 - **State**: TanStack Query for server state (via tRPC), Zustand for editor-local state (selection, layout draft, presence).
 - **Agent panel**: `useChat` and SSE show streamed text, tool-call steps, and cancel controls.

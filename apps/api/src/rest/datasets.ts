@@ -11,8 +11,8 @@ import type { Queue } from "bullmq";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
-import type { GraphiteAuth } from "../auth.js";
-import { resolveRestUser, requireRestAuthorized } from "./auth.js";
+import type { GraphiteAuth } from "../auth";
+import { resolveRestUser, requireRestAuthorized } from "./auth";
 
 export interface DatasetsRestDeps {
   db: Database;

@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import type { DbLike } from "../client.js";
-import { projects, type Project } from "../schema/index.js";
+import type { DbLike } from "../client";
+import { projects, type Project } from "../schema/index";
 
 export interface CreateProjectInput {
   organizationId: string;

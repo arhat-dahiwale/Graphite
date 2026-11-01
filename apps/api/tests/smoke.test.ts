@@ -23,6 +23,9 @@ function makeDeps(): AppDeps {
     db: {} as AppDeps["db"],
     sql: stubSql,
     redis: stubRedis,
+    getDataClient: () => {
+      throw new Error("data service not available in this test");
+    },
     resolveMembershipRole: async () => null,
   };
 }

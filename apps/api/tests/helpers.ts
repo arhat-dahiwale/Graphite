@@ -10,6 +10,7 @@ import { ServerCredentials } from "@grpc/grpc-js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startIngestionWorker } from "../../../apps/worker/src/queues/ingestion.js";
+import { createDataClient, type DataClient } from "@graphite/data/client";
 import type { Worker as BullWorker } from "bullmq";
 import { createApp } from "../src/app.js";
 import { createAuth } from "../src/auth.js";
@@ -113,11 +114,16 @@ export async function startTestApp(): Promise<TestApp> {
     concurrency: 2,
   });
 
+  let dataClient: DataClient | null = null;
   const deps: AppDeps = {
     db,
     sql,
     redis,
     auth,
+    getDataClient: () => {
+      dataClient ??= createDataClient(`127.0.0.1:${dataPort}`);
+      return dataClient;
+    },
     resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
   };
 

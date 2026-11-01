@@ -4,8 +4,8 @@ import { datasets, datasetColumns } from "@graphite/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { createDataClient, type DataClient, type GrpcContext } from "@graphite/data/client";
 import type { Database } from "@graphite/db/client";
-import type { GraphiteAuth } from "../auth.js";
-import { resolveRestUser, requireRestAuthorized } from "./auth.js";
+import type { GraphiteAuth } from "../auth";
+import { resolveRestUser, requireRestAuthorized } from "./auth";
 
 export interface DatasetRestDeps {
   db: Database;

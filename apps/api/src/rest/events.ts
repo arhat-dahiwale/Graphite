@@ -4,8 +4,8 @@ import { datasetEventsChannel, runEventsChannel } from "@graphite/core";
 import { datasets, agentRuns } from "@graphite/db/schema";
 import { eq } from "drizzle-orm";
 import type { Database } from "@graphite/db/client";
-import type { GraphiteAuth } from "../auth.js";
-import { resolveRestUser, requireRestAuthorized } from "./auth.js";
+import type { GraphiteAuth } from "../auth";
+import { resolveRestUser, requireRestAuthorized } from "./auth";
 
 /**
  * Server-Sent Events for ingestion progress and agent run streams.

@@ -3,7 +3,8 @@ import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
 import type Redis from "ioredis";
 import type { IncomingHttpHeaders } from "node:http";
-import type { GraphiteAuth } from "./auth.js";
+import type { DataClient } from "@graphite/data/client";
+import type { GraphiteAuth } from "./auth";
 
 export interface SessionUser {
   id: string;
@@ -17,6 +18,8 @@ export interface AppDeps {
   redis: Redis;
   /** Better Auth instance; mounts /api/auth/* and resolves sessions. */
   auth?: GraphiteAuth;
+  /** gRPC client factory for the data service (chart.data queries). */
+  getDataClient: () => DataClient;
   /** Resolve membership role for a user within an org (repo-backed). */
   resolveMembershipRole: (
     user: SessionUser,
@@ -31,6 +34,8 @@ export interface Context {
   db: Database;
   sql: Sql;
   redis: Redis;
+  /** gRPC client for the data service (chart.data queries). */
+  getDataClient: () => DataClient;
   /** Actor (membership role) of the session user within an org, or null. */
   actorFor: (orgId: string) => Promise<Actor | null>;
 }
@@ -40,7 +45,7 @@ export interface Context {
  * auth middleware; `actorFor` lazily resolves the membership role per org.
  */
 export function createContext(
-  deps: Pick<AppDeps, "db" | "sql" | "redis" | "resolveMembershipRole">,
+  deps: Pick<AppDeps, "db" | "sql" | "redis" | "getDataClient" | "resolveMembershipRole">,
   opts: { requestId: string; headers: IncomingHttpHeaders; user: SessionUser | null },
 ): Context {
   const { user } = opts;
@@ -51,6 +56,7 @@ export function createContext(
     db: deps.db,
     sql: deps.sql,
     redis: deps.redis,
+    getDataClient: deps.getDataClient,
     actorFor: async (orgId: string) => {
       if (!user) return null;
       const role = await deps.resolveMembershipRole(user, orgId);

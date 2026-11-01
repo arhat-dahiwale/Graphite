@@ -1,6 +1,6 @@
 import { AppError, notFound, unprocessable, type AppError as AppErrorT } from "@graphite/core";
 import type { Sql, TransactionSql } from "postgres";
-import { checkSql } from "./sqlcheck.js";
+import { checkSql } from "./sqlcheck";
 
 export interface DataServiceOptions {
   /** App-role pool for dataset metadata (id -> table resolution). */

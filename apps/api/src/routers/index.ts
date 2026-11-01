@@ -1,9 +1,11 @@
-import { router } from "../trpc.js";
-import { helloRouter } from "./hello.js";
-import { orgRouter } from "./org.js";
-import { memberRouter } from "./member.js";
-import { projectRouter } from "./project.js";
-import { datasetRouter } from "./dataset.js";
+import { router } from "../trpc";
+import { helloRouter } from "./hello";
+import { orgRouter } from "./org";
+import { memberRouter } from "./member";
+import { projectRouter } from "./project";
+import { datasetRouter } from "./dataset";
+import { dashboardRouter } from "./dashboard";
+import { chartRouter } from "./chart";
 
 export const appRouter = router({
   hello: helloRouter,
@@ -11,6 +13,8 @@ export const appRouter = router({
   member: memberRouter,
   project: projectRouter,
   dataset: datasetRouter,
+  dashboard: dashboardRouter,
+  chart: chartRouter,
 });
 
 export type AppRouter = typeof appRouter;

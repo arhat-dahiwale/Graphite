@@ -9,7 +9,7 @@ import {
 import type { Database } from "@graphite/db/client";
 import { and, eq } from "drizzle-orm";
 import { datasets, datasetColumns, type ColumnType, type DatasetColumn } from "@graphite/db/schema";
-import { castCell, inferColumnType, isNullableSample, pgTypeFor, type ColumnSpec } from "./types.js";
+import { castCell, inferColumnType, isNullableSample, pgTypeFor, type ColumnSpec } from "./types";
 import type { S3Client } from "@aws-sdk/client-s3";
 import { getObjectStream } from "@graphite/storage";
 import type Redis from "ioredis";

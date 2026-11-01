@@ -1,7 +1,8 @@
-import { Parser } from "node-sql-parser";
+import sqlParserPkg from "node-sql-parser";
 import { unprocessable, type AppError } from "@graphite/core";
 
-const parser = new Parser();
+// node-sql-parser is CJS; its named exports are not statically detectable from ESM.
+const parser = new sqlParserPkg.Parser();
 
 export interface SqlCheckInput {
   sql: string;

@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
-import type { DbLike } from "../client.js";
-import { members, users, type MemberRole } from "../schema/index.js";
+import type { DbLike } from "../client";
+import { members, users, type MemberRole } from "../schema/index";
 
 export interface MemberWithUser {
   membershipId: string;

@@ -4,8 +4,8 @@ import { pgTypeFor } from "@graphite/core";
 import { datasets, datasetColumns } from "@graphite/db/schema";
 import { getProjectById } from "@graphite/db/repo/projects";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { authedProcedure, router, toTrpcError } from "../trpc.js";
-import { requireAuthorized } from "../authz-helpers.js";
+import { authedProcedure, router, toTrpcError } from "../trpc";
+import { requireAuthorized } from "../authz-helpers";
 
 const columnTypeSchema = z.enum(["number", "integer", "text", "boolean", "date", "datetime"]);
 

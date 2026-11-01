@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { publicProcedure, router } from "../trpc.js";
+import { publicProcedure, router } from "../trpc";
 
 export const helloRouter = router({
   /** Phase 0 hello-world procedure. */

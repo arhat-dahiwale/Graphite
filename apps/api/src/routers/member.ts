@@ -14,9 +14,9 @@ import {
   updateMemberRole,
 } from "@graphite/db/repo/members";
 import { getOrgById } from "@graphite/db/repo/orgs";
-import { authedProcedure, router, toTrpcError } from "../trpc.js";
-import { requireAuthorized } from "../authz-helpers.js";
-import { sendInviteEmail } from "../mailer.js";
+import { authedProcedure, router, toTrpcError } from "../trpc";
+import { requireAuthorized } from "../authz-helpers";
+import { sendInviteEmail } from "../mailer";
 
 export const memberRouter = router({
   list: authedProcedure

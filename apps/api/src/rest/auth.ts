@@ -2,8 +2,8 @@ import type { Request } from "express";
 import { authorize, forbidden, notFound, type Action, type ResourceType, type Role } from "@graphite/core";
 import type { Database } from "@graphite/db/client";
 import { getMembership } from "@graphite/db/repo/members";
-import type { GraphiteAuth } from "../auth.js";
-import type { SessionUser } from "../context.js";
+import type { GraphiteAuth } from "../auth";
+import type { SessionUser } from "../context";
 
 export interface RestSession {
   user: SessionUser;

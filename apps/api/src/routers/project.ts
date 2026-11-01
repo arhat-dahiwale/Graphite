@@ -7,8 +7,8 @@ import {
   softDeleteProject,
   updateProject,
 } from "@graphite/db/repo/projects";
-import { authedProcedure, router, toTrpcError } from "../trpc.js";
-import { requireAuthorized } from "../authz-helpers.js";
+import { authedProcedure, router, toTrpcError } from "../trpc";
+import { requireAuthorized } from "../authz-helpers";
 
 export const projectRouter = router({
   list: authedProcedure

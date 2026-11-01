@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { DbLike } from "../client.js";
-import { members, organizations, type MemberRole, type Organization } from "../schema/index.js";
+import type { DbLike } from "../client";
+import { members, organizations, type MemberRole, type Organization } from "../schema/index";
 
 /** Get the organization row by id. Never filtered by caller; use membership checks. */
 export async function getOrgById(db: DbLike, orgId: string): Promise<Organization | null> {

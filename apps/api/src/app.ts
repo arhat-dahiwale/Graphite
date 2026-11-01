@@ -7,12 +7,12 @@ import express, {
 import cors from "cors";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { isAppError, logger, notFound, withTimeout, type AppError } from "@graphite/core";
-import { createContext, type AppDeps, type SessionUser } from "./context.js";
-import { appRouter } from "./routers/index.js";
-import { invitationsRestRouter } from "./rest/invitations.js";
-import { datasetsRestRouter } from "./rest/datasets.js";
-import { datasetRestRouter } from "./rest/datasets-query.js";
-import { eventsRestRouter } from "./rest/events.js";
+import { createContext, type AppDeps, type SessionUser } from "./context";
+import { appRouter } from "./routers/index";
+import { invitationsRestRouter } from "./rest/invitations";
+import { datasetsRestRouter } from "./rest/datasets";
+import { datasetRestRouter } from "./rest/datasets-query";
+import { eventsRestRouter } from "./rest/events";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { Queue } from "bullmq";
 

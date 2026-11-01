@@ -5,7 +5,7 @@ import { createDb } from "@graphite/db/client";
 import express from "express";
 import Redis from "ioredis";
 import { createStorage, ensureBucket } from "@graphite/storage";
-import { startIngestionWorker } from "./queues/ingestion.js";
+import { startIngestionWorker } from "./queues/ingestion";
 
 loadRootEnv();
 const log = childLogger({ component: "worker" });

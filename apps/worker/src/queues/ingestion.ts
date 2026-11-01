@@ -4,7 +4,7 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import type Redis from "ioredis";
 import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
-import { processIngestion, type IngestionDeps } from "../ingestion/process.js";
+import { processIngestion, type IngestionDeps } from "../ingestion/process";
 
 const log = childLogger({ component: "worker-ingestion" });
 

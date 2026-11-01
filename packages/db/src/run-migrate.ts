@@ -1,5 +1,5 @@
-import { loadRootEnv } from "./env.js";
-import { runMigrations } from "./migrate.js";
+import { loadRootEnv } from "./env";
+import { runMigrations } from "./migrate";
 
 async function main(): Promise<void> {
   loadRootEnv();

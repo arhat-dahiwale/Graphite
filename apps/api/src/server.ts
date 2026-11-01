@@ -4,10 +4,11 @@ import { createDb } from "@graphite/db/client";
 import { getMembership } from "@graphite/db/repo/members";
 import { Queue } from "bullmq";
 import { createStorage, ensureBucket } from "@graphite/storage";
-import { createApp } from "./app.js";
-import { createAuth } from "./auth.js";
-import { env } from "./env.js";
-import { createRedis } from "./redis.js";
+import { createDataClient, type DataClient } from "@graphite/data/client";
+import { createApp } from "./app";
+import { createAuth } from "./auth";
+import { env } from "./env";
+import { createRedis } from "./redis";
 
 loadRootEnv();
 const log = childLogger({ component: "api" });
@@ -46,12 +47,24 @@ async function main(): Promise<void> {
     connection: redis,
   });
 
+  const dataClients = new Map<string, DataClient>();
+  const getDataClient = (): DataClient => {
+    const addr = `${env.DATA_GRPC_HOST}:${env.DATA_GRPC_PORT}`;
+    let c = dataClients.get(addr);
+    if (!c) {
+      c = createDataClient(addr);
+      dataClients.set(addr, c);
+    }
+    return c;
+  };
+
   const { app } = createApp(
     {
       db,
       sql,
       redis,
       auth,
+      getDataClient,
       resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
     },
     {

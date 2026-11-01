@@ -6,7 +6,7 @@ import express from "express";
 import { ServerCredentials } from "@grpc/grpc-js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDataService } from "./service.js";
+import { createDataService } from "./service";
 
 loadRootEnv();
 const log = childLogger({ component: "data" });

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { acceptInvitation } from "@graphite/db/repo/invitations";
-import type { AppDeps } from "../context.js";
+import type { AppDeps } from "../context";
 
 /**
  * REST: POST /api/v1/invitations/:token/accept (API.md).

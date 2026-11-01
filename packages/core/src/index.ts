@@ -1,11 +1,11 @@
 // Browser-safe barrel: no dotenv, no Node-only modules.
-export * from "./ids.js";
-export * from "./logger.js";
-export * from "./errors.js";
-export * from "./authz.js";
-export * from "./events.js";
-export * from "./csv.js";
-export * from "./dataset-types.js";
+export * from "./ids";
+export * from "./logger";
+export * from "./errors";
+export * from "./authz";
+export * from "./events";
+export * from "./csv";
+export * from "./dataset-types";
 
 /** Reject after `ms` even if the promise never settles. */
 export function withTimeout<T>(promise: Promise<T>, ms: number, message = "timeout"): Promise<T> {

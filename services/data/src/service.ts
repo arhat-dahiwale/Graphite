@@ -8,7 +8,7 @@ import {
 } from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
 import { AppError } from "@graphite/core";
-import { buildServiceImplementation, type DataServiceOptions } from "./handlers.js";
+import { buildServiceImplementation, type DataServiceOptions } from "./handlers";
 
 export type { DataServiceOptions };
 interface ProtoShape {

@@ -8,8 +8,8 @@ import {
   softDeleteOrg,
   updateOrg,
 } from "@graphite/db/repo/orgs";
-import { authedProcedure, router, toTrpcError } from "../trpc.js";
-import { requireAuthorized } from "../authz-helpers.js";
+import { authedProcedure, router, toTrpcError } from "../trpc";
+import { requireAuthorized } from "../authz-helpers";
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 

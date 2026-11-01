@@ -81,3 +81,18 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** 25 api tests incl. 13 new integration (upload/SSE/idempotency/override/8 gRPC safety), 9 sqlcheck unit tests, core dataset-type tests; full lint/typecheck/test green; 10 MB criterion verified at ~11 s
 **Decisions:** CTEs rejected in run_sql v1 (conservative; chart compiler emits flat SELECTs); preview flows through the data service so read-only rules apply everywhere
 **Follow-ups:** none
+
+### 2026-11-01 07:55 | GLM-5.3-Flash (overnight run) | Phase 3
+**Task:** Chart spec, query compiler, manual dashboard canvas
+**Summary:**
+- packages/chart-spec: strict Zod ChartSpec (bar/line/area/pie/histogram, query/select/filter/groupBy/orderBy/limit), compileChartQuery (field-validated identifiers, typed+escaped literals, AST-checkable flat SELECT), specToEChartsOption (single adapter incl. palettes, temporal axes, color-series split, pie name/value)
+- DB repos: dashboards (create/get/rename/delete, getLayout, saveLayout with layout_version optimistic concurrency returning current layout on conflict), charts (create with version 1, append-only versions, revert-as-new-version, dashboard placement)
+- tRPC dashboard/chart routers: viewer read / editor write, chart.create|createVersion|revert compile-check specs (422 on invalid), chart.data runs compiled SQL through the gRPC data service (numeric strings coerced for charts), audit entries for chart mutations
+- UI: project page dashboards section; dashboard canvas — RGL v2 grid (drag via handle, resize), Framer Motion layout/spring transitions, chart builder modal (dataset/type/x/y/agg), version history dialog with revert, debounced layout saves with conflict banner + reconciliation
+- Verified in browser: dataset upload -> dashboard -> bar chart built via builder -> ECharts canvas rendered -> drag moved chart and persisted (layout v2); conflict banner + auto-reload observed when a stale save raced (then debounced)
+- Converted all intra-package relative imports from .js to extensionless: Turbopack does not remap .js->.ts like tsx does (chart-spec failed to bundle before); node-sql-parser imported via default (CJS named exports not statically detectable)
+**Files changed:** packages/chart-spec, packages/db (repo/{dashboards,charts,datasets,audit}), apps/api (routers/{dashboard,chart}, context getDataClient), apps/web (chart-renderer, dashboard page, project page)
+**Docs updated:** ARCHITECTURE.md (RGL v2 note)
+**Tests:** chart-spec 12 unit tests (schema/compiler/escaping/adapter); api dashboards suite 6 integration tests (layout conflict, viewer denied, version history, revert, chart.data, audit); full lint/typecheck/test green
+**Decisions:** revert stores a NEW version (history immutable per DATA.md); CTE-free compiler keeps AST gate simple; numeric aggregates from Postgres are coerced to numbers in chart.data
+**Follow-ups:** none

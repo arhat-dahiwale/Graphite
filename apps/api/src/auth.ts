@@ -4,7 +4,7 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import type { Request } from "express";
 import type { Database } from "@graphite/db/client";
 import { users, sessions, accounts, verifications } from "@graphite/db/schema";
-import type { SessionUser } from "./context.js";
+import type { SessionUser } from "./context";
 
 export interface AuthOptions {
   db: Database;

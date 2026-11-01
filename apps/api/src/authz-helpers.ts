@@ -1,5 +1,5 @@
 import { authorize, forbidden, notFound, type Action, type Actor, type AuthorizeResource, type ResourceType } from "@graphite/core";
-import type { Context } from "./context.js";
+import type { Context } from "./context";
 
 type ResourceInput = Partial<Pick<AuthorizeResource, "ownerId">> & {
   type: ResourceType;

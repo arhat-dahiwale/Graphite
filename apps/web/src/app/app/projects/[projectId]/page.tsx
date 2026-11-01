@@ -12,6 +12,11 @@ export default function ProjectPage({
   const { projectId } = use(params);
   const utils = trpc.useUtils();
   const datasets = trpc.dataset.list.useQuery({ projectId });
+  const dashboards = trpc.dashboard.list.useQuery({ projectId });
+  const createDashboard = trpc.dashboard.create.useMutation({
+    onSuccess: () => utils.dashboard.list.invalidate({ projectId }),
+  });
+  const [dashName, setDashName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +64,48 @@ export default function ProjectPage({
         </label>
       </header>
       {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium text-zinc-400">Dashboards</h2>
+        <div className="flex gap-2">
+          <input
+            value={dashName}
+            onChange={(e) => setDashName(e.target.value)}
+            placeholder="New dashboard name"
+            className="flex-1 rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => {
+              if (dashName.trim()) {
+                createDashboard.mutate({ projectId, name: dashName.trim() });
+                setDashName("");
+              }
+            }}
+            disabled={!dashName.trim() || createDashboard.isPending}
+            className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white disabled:opacity-50"
+          >
+            Create dashboard
+          </button>
+        </div>
+        <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+          {(dashboards.data ?? []).map((d) => (
+            <li key={d.id} className="px-4 py-3">
+              <Link
+                href={`/app/projects/${projectId}/dashboards/${d.id}`}
+                className="font-medium underline-offset-2 hover:underline"
+              >
+                {d.name}
+              </Link>
+              <span className="ml-2 text-xs text-zinc-600">layout v{d.layoutVersion}</span>
+            </li>
+          ))}
+          {dashboards.data?.length === 0 && (
+            <li className="px-4 py-6 text-center text-sm text-zinc-500">
+              No dashboards yet — create one, then add charts to it.
+            </li>
+          )}
+        </ul>
+      </section>
 
       <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
         {(datasets.data ?? []).map((d) => (
