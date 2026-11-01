@@ -158,3 +158,14 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 2. Agent pipeline: apps/worker/src/agent/* (prompts + injection defenses, orchestrator budgets/cancel) and packages/mcp-server (signed internal identity) — replace/verify the mock with a real model here
 3. Layout concurrency + realtime: packages/db/src/repo/dashboards.ts (saveLayout) and apps/api/src/collab.ts (multi-instance relays) — the correctness-critical collaboration paths
 **Follow-ups:** live-LLM verification of the two deferred criteria; Phase 7+ untouched (hard stop respected)
+
+### 2026-11-02 00:40 | GLM-5.3-Flash (overnight run) | Critical fixes
+**Task:** Three security fixes before Phase 7 (internal secret, tenant-isolation tests, CORS origins)
+**Summary:**
+- INTERNAL_MCP_SECRET (new dedicated var, no default, min 32 chars) replaces BETTER_AUTH_SECRET as the internal MCP identity secret; assertInternalMcpSecret() runs at MCP-router mount and in the worker env schema, so any signing/verifying process fails startup with a clear error; added to .env.example/.env; test harness secret lengthened
+- Tenant-isolation suite (apps/api/tests/tenant-isolation.test.ts): all 10 MCP tools called with an org-B identity against org-A resources fail with NOT_FOUND and create no side effects; Socket.IO join/layout:save rejected cross-tenant. THE TESTS EXPOSED A REAL LEAK: cursor:move/presence:update/chart:drag relays lacked membership checks — fixed in collab.ts by requiring a prior membership-checked dashboard:join (joinedDashboards gate)
+- CORS_ORIGINS (comma-separated explicit origins, "*" rejected since credentials are enabled) now drives Express CORS and Socket.IO; added engine.io allowRequest so disallowed-origin handshakes are aborted server-side (cors alone only withholds headers — verified by test); parseAllowedOrigins() in core/config; documented in API.md and .env.example
+**Files changed:** packages/core/src/config.ts, packages/mcp-server/src/{internal-auth,server}.ts, apps/worker/src/index.ts, apps/api/src/{env,app,collab,server}.ts, .env.example, .env, API.md
+**Tests:** new apps/worker/tests/internal-secret.test.ts (6), apps/api/tests/tenant-isolation.test.ts (10), apps/api/tests/cors-origins.test.ts (7); full suite 119 tests green; lint + typecheck clean
+**Decisions:** secret asserted at router mount (covers any process that mounts MCP, incl. the Phase 7 API mount); missing Origin header allowed in Socket.IO allowRequest (non-browser clients still need session auth)
+**Follow-ups:** none
