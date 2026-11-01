@@ -16,6 +16,28 @@ export interface InternalContext {
   dashboardId?: string;
 }
 
+/**
+ * The internal identity secret has NO default and must be at least 32
+ * characters. Every process that signs or verifies the internal headers
+ * (the worker's MCP mount and orchestrator; the API when it mounts MCP)
+ * calls this at startup and refuses to boot otherwise.
+ */
+export function assertInternalMcpSecret(secret: string | undefined): string {
+  if (!secret || secret.length === 0) {
+    throw new Error(
+      "INTERNAL_MCP_SECRET is not set: refusing to start. " +
+        "It signs the internal MCP identity headers (generate with: openssl rand -base64 32).",
+    );
+  }
+  if (secret.length < 32) {
+    throw new Error(
+      "INTERNAL_MCP_SECRET is shorter than 32 characters: refusing to start. " +
+        "Generate a strong secret with: openssl rand -base64 32.",
+    );
+  }
+  return secret;
+}
+
 export function signInternalContext(ctx: InternalContext, secret: string): {
   context: string;
   signature: string;

@@ -130,7 +130,8 @@ export async function startTestApp(
   });
   // The test harness mounts the SAME internal MCP server the worker uses in
   // production, so agent tool calls flow through MCP here as well.
-  const mcpSecret = "test-internal-mcp-secret";
+  // Must satisfy the same strength rule as production (>= 32 chars).
+  const mcpSecret = "test-internal-mcp-secret-0123456789abcdef";
   const mcpApp = express();
   mcpApp.use(express.json({ limit: "2mb" }));
   mcpApp.use(

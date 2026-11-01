@@ -36,7 +36,9 @@ const envSchema = z.object({
   ANTHROPIC_MODEL: z.string().optional(),
   DATA_GRPC_HOST: z.string().default("127.0.0.1"),
   DATA_GRPC_PORT: z.string().default("50051"),
-  BETTER_AUTH_SECRET: z.string().default("dev-worker-internal-secret"),
+  // Signs the internal MCP identity headers. No default: a missing or weak
+  // secret must fail startup, not weaken identity verification.
+  INTERNAL_MCP_SECRET: z.string().min(32),
   WORKER_INTERNAL_MCP_PORT: z.coerce.number().int().default(4100),
 });
 
@@ -74,7 +76,7 @@ async function main(): Promise<void> {
       sql,
       redis,
       getDataClient,
-      secret: env.BETTER_AUTH_SECRET,
+      secret: env.INTERNAL_MCP_SECRET,
     }),
   );
   mcpApp.listen(env.WORKER_INTERNAL_MCP_PORT, "127.0.0.1", () => {
@@ -95,7 +97,7 @@ async function main(): Promise<void> {
       db,
       sql,
       mcpBaseUrl: `http://127.0.0.1:${env.WORKER_INTERNAL_MCP_PORT}`,
-      mcpSecret: env.BETTER_AUTH_SECRET,
+      mcpSecret: env.INTERNAL_MCP_SECRET,
       tokenBudget: env.AGENT_TOKEN_BUDGET,
       concurrency: env.AGENT_RUN_CONCURRENCY,
     }),

@@ -10,7 +10,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { mcpTokens } from "@graphite/db/schema";
 import { childLogger } from "@graphite/core";
 import type { ToolContext } from "./context.js";
-import { verifyInternalContext, type InternalContext } from "./internal-auth.js";
+import {
+  assertInternalMcpSecret,
+  verifyInternalContext,
+  type InternalContext,
+} from "./internal-auth.js";
 import {
   addChartToDashboard,
   addChartToDashboardInput,
@@ -97,6 +101,9 @@ function toIdentity(ctx: InternalContext): ResolvedIdentity {
  * checks inside each tool match the caller exactly.
  */
 export function createMcpRouter(deps: McpRouterDeps): Router {
+  // Fail fast at mount time: a missing or weak internal secret must stop the
+  // process, not silently weaken identity verification.
+  const secret = assertInternalMcpSecret(deps.secret);
   const router = Router();
 
   const buildServer = (identity: ResolvedIdentity): McpServer => {
