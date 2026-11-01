@@ -169,3 +169,18 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** new apps/worker/tests/internal-secret.test.ts (6), apps/api/tests/tenant-isolation.test.ts (10), apps/api/tests/cors-origins.test.ts (7); full suite 119 tests green; lint + typecheck clean
 **Decisions:** secret asserted at router mount (covers any process that mounts MCP, incl. the Phase 7 API mount); missing Origin header allowed in Socket.IO allowRequest (non-browser clients still need session auth)
 **Follow-ups:** none
+
+### 2026-11-02 01:05 | GLM-5.3-Flash (overnight run) | Phase 7
+**Task:** External MCP server — PAT auth, scopes, Integrations UI, live events
+**Summary:**
+- External MCP mounted at /mcp on the API (Streamable HTTP, stateless) sharing tool implementations with the worker's internal mount; both converge on ToolContext with real membership roles (replaced hardcoded role=editor; fake-user test updated accordingly)
+- PAT service (packages/mcp-server/tokens.ts): gph_live_ tokens, sha256-hashed, shown once, scoped (datasets:read/charts:read/charts:write via scopes.ts per-tool map), revocable, optional expiry, bound to user+org; revoke/expiry rejected on next request (tested)
+- Scope gate in the MCP register wrapper: missing scope -> isError naming the scope; per-token rate limit 120 req/min (MCP_TOKEN_RATE_LIMIT) with 429 + Retry-After; connected-client tracking from initialize clientInfo (mcp_clients)
+- tRPC integration router + REST /api/v1/orgs/:orgId/mcp/tokens|clients (API.md); Integrations page in web UI (create/show-once/copy/snippet/list/revoke/clients) verified in a real browser; UI-created token verified against live /mcp initialize and recorded as a connected client
+- Fixed publishChartEvent to emit chart:added for add_chart_to_dashboard (was always chart:version-created); web useCollab handles chart:added -> dashboard refetch
+- Scripted MCP client test replaces the Claude Desktop check: create_chart_spec + add_chart_to_dashboard over /mcp with a token, chart exists (source mcp, v1) and a Socket.IO client joined to the dashboard receives chart:version-created + chart:added live
+**Files changed:** packages/mcp-server (server.ts, tokens.ts, scopes.ts, tools/index.ts), apps/api (app.ts, env.ts, server.ts, routers/{index,integration}.ts, rest/integrations.ts), apps/web (integrations page, shell, use-collab, dashboard page), tests (mcp-external.test.ts new, helpers, mcp.test.ts)
+**Docs updated:** API.md (MCP auth/scopes/rate-limit/clients, integrations roles), ARCHITECTURE.md (internal=worker signed / external=API token mounts), PHASES.md
+**Tests:** full suite 128 green (api 74 incl. 9 new external-MCP tests); lint + typecheck clean
+**Decisions:** identity resolution now verifies membership for BOTH paths (internal signed identity resolves the real role; unknown user 404s); Claude Desktop exit criterion ticked for what the scripted client proves, real-desktop verification deferred as a new line
+**Follow-ups:** demo GIF + real Claude Desktop verification deferred to a human; Phase 10 adds OAuth 2.1 alongside tokens
