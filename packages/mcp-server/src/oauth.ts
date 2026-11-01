@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { Database } from "@graphite/db/client";
 import { oauthClients, oauthCodes, oauthTokens } from "@graphite/db/schema";
-import { forbidden, unauthorized } from "@graphite/core";
+import { unauthorized } from "@graphite/core";
 import { MCP_SCOPES } from "./scopes.js";
 import { validateScopes } from "./tokens.js";
 

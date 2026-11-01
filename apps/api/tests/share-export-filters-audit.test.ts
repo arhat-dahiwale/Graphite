@@ -19,7 +19,6 @@ let app: TestApp;
 let alice: string;
 let bob: string;
 let orgAId = "";
-let orgBId = "";
 let projectId = "";
 let datasetId = "";
 let dashboardId = "";
@@ -32,8 +31,6 @@ beforeAll(async () => {
   bob = await signUp(app.baseUrl, "share-bob@test.example", "Bob");
   const orgA = await trpc<{ id: string }>(app.baseUrl, alice, "org.create", { name: "Share Org" }, "mutation");
   orgAId = orgA.id;
-  const orgB = await trpc<{ id: string }>(app.baseUrl, bob, "org.create", { name: "Share Org B" }, "mutation");
-  orgBId = orgB.id;
   const project = await trpc<{ id: string }>(app.baseUrl, alice, "project.create", { orgId: orgAId, name: "Share Project" }, "mutation");
   projectId = project.id;
   const up = await uploadCsv(app.baseUrl, alice, projectId, "share.csv", "region,revenue,day\nnorth,120,2026-01-01\nnorth,80,2026-02-01\nsouth,60,2026-01-15");

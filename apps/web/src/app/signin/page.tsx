@@ -68,7 +68,7 @@ export default function SignInPage() {
         >
           {pending ? "Signing in…" : "Sign in"}
         </button>
-        <p className="text-center text-sm text-zinc-500">
+        <p className="text-center text-sm text-zinc-300">
           No account?{" "}
           <Link href="/signup" className="text-zinc-300 underline">
             Sign up

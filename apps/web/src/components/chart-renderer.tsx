@@ -26,7 +26,7 @@ export function ChartRenderer({ spec, data, loading, error }: ChartRendererProps
     const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#101013" });
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${spec.title.replace(/[^\w-]+/g, "_")}.png`;
+    a.download = `${(spec?.title ?? "chart").replace(/[^\w-]+/g, "_")}.png`;
     a.click();
   }
 
@@ -61,7 +61,7 @@ export function ChartRenderer({ spec, data, loading, error }: ChartRendererProps
       <div ref={ref} className="h-full w-full" />
       <button
         onClick={exportPng}
-        aria-label={`Download ${spec.title} as PNG`}
+        aria-label={`Download ${spec?.title ?? "chart"} as PNG`}
         className="absolute right-2 top-2 z-10 rounded border border-zinc-700 bg-zinc-950/80 px-2 py-0.5 text-[10px] text-zinc-400 opacity-0 transition-opacity hover:text-zinc-200 focus-visible:opacity-100 group-hover:opacity-100"
       >
         PNG

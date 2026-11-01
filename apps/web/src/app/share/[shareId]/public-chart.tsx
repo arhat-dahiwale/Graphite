@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import type { ChartSpec } from "@graphite/chart-spec";
+import type { ChartSpec, specToEChartsOption } from "@graphite/chart-spec";
 
 /** Client-side ECharts render for the public share view. */
 export function PublicChart({
@@ -10,7 +10,7 @@ export function PublicChart({
   option,
 }: {
   spec: ChartSpec;
-  option: ReturnType<typeof import("@graphite/chart-spec").specToEChartsOption>;
+  option: ReturnType<typeof specToEChartsOption>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 

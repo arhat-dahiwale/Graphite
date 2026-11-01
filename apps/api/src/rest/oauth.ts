@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { isAppError, unauthorized } from "@graphite/core";
+import { isAppError } from "@graphite/core";
 import {
   createAuthorizationCode,
   exchangeCodeForTokens,
