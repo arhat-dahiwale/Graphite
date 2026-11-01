@@ -48,6 +48,14 @@ export default function DashboardPage({
     }
   }, [collab.chartVersionEvent, dashboardId, utils.dashboard.get]);
 
+  // Refresh when a chart is added to the dashboard from outside this browser
+  // (MCP client, another member, agent).
+  useEffect(() => {
+    if (collab.chartAddedEvent) {
+      void utils.dashboard.get.invalidate({ dashboardId });
+    }
+  }, [collab.chartAddedEvent, dashboardId, utils.dashboard.get]);
+
   const saveLayout = trpc.dashboard.saveLayout.useMutation({
     onSuccess: (result) => {
       if (result.ok) {

@@ -111,8 +111,12 @@ describe("MCP server (protocol level)", () => {
   });
 
   it("enforces tenant isolation inside tools", async () => {
-    // Bob's signed identity cannot resolve Alice's dataset.
-    await withSignedClient({ userId: "u_bob", orgId: orgBId }, async (c) => {
+    // Bob's signed identity cannot resolve Alice's dataset. Bob is a real
+    // member of org B; identity resolution verifies membership and every
+    // tool re-checks the tenant.
+    const members = await trpc<Array<{ userId: string; email: string }>>(app.baseUrl, bob, "member.list", { orgId: orgBId });
+    const bobId = members.find((m) => m.email === "mcp-bob@test.example")!.userId;
+    await withSignedClient({ userId: bobId, orgId: orgBId }, async (c) => {
       const res = await c.callTool({ name: "describe_dataset", arguments: { datasetId } });
       expect(res.isError).toBe(true);
       const text = (res.content as Array<{ text: string }>)[0]?.text ?? "";

@@ -146,19 +146,20 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 7: MCP server (external)
 **Goal:** Claude Desktop and Cursor can use Graphite.
 
-- [ ] Streamable HTTP endpoint at `/mcp`
-- [ ] Personal access tokens: hashed, scoped, revocable, shown once
-- [ ] Token auth middleware resolving user, org, and scopes
-- [ ] Integrations page: create token, config snippet, connected clients
-- [ ] Connected client tracking
-- [ ] Audit log entries for external tool calls
-- [ ] Events published so open browsers update live
-- [ ] Demo GIF of a chart created from an external client
+- [x] Streamable HTTP endpoint at `/mcp`
+- [x] Personal access tokens: hashed, scoped, revocable, shown once
+- [x] Token auth middleware resolving user, org, and scopes
+- [x] Integrations page: create token, config snippet, connected clients
+- [x] Connected client tracking
+- [x] Audit log entries for external tool calls
+- [x] Events published so open browsers update live
+- [ ] Demo GIF of a chart created from an external client (deferred: needs a human desktop client and screen recording)
 
 **Exit criteria**
-- [ ] A chart created from Claude Desktop appears live in an open dashboard
-- [ ] A revoked token is rejected immediately
-- [ ] A token without `charts:write` cannot call write tools
+- [x] A chart created from Claude Desktop appears live in an open dashboard (verified with an automated scripted MCP client over Streamable HTTP + a Socket.IO client observing the live event; see tests/mcp-external.test.ts)
+- [ ] Verified with real Claude Desktop (deferred: needs human on a desktop client)
+- [x] A revoked token is rejected immediately
+- [x] A token without `charts:write` cannot call write tools
 
 ---
 
@@ -236,7 +237,7 @@ Tick a phase only when every box inside it is checked.
 - [ ] Phase 4: Agent (done except live-LLM verification)
 - [ ] Phase 5: MCP (internal) (done except live-LLM verification)
 - [x] Phase 6: Collaboration
-- [ ] Phase 7: MCP (external)
+- [ ] Phase 7: MCP (external) (done except Claude Desktop verification and demo GIF)
 - [ ] Phase 8: Observability
 - [ ] Phase 9: Kubernetes and CI/CD
 - [ ] Phase 10: Polish

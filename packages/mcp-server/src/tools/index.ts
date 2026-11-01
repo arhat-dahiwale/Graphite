@@ -55,10 +55,11 @@ async function publishChartEvent(
   ctx: ToolContext,
   dashboardId: string,
   data: Record<string, unknown>,
+  type: "chart:version-created" | "chart:added" = "chart:version-created",
 ): Promise<void> {
   await ctx.redis.publish(
     dashboardEventsChannel(dashboardId),
-    JSON.stringify({ type: "chart:version-created", dashboardId, data }),
+    JSON.stringify({ type, dashboardId, data }),
   );
 }
 
@@ -466,9 +467,11 @@ export async function addChartToDashboard(
     resourceId: input.chartId,
     metadata: { dashboardId: input.dashboardId, runId: ctx.agentRunId },
   });
-  await publishChartEvent(ctx, input.dashboardId, {
-    chartId: input.chartId,
-    source: ctx.agentRunId ? "agent" : "mcp",
-  });
+  await publishChartEvent(
+    ctx,
+    input.dashboardId,
+    { chartId: input.chartId, source: ctx.agentRunId ? "agent" : "mcp" },
+    "chart:added",
+  );
   return { ok: true };
 }

@@ -88,10 +88,10 @@ Owns all execution of user-visible SQL.
 - Exposes an HTTP `/healthz` on `DATA_HEALTH_PORT` (50052) for probes.
 
 ### 3.5 packages/mcp-server
-Defines tools and resources once with the MCP TypeScript SDK and Zod schemas.
-- **Internal use**: the orchestrator connects with the AI SDK's MCP client.
-- **External use**: mounted at `/mcp` over Streamable HTTP; authenticated by personal access token (OAuth 2.1 later).
-- Every tool call executes with the caller's identity, so role and tenant checks are identical for internal and external callers.
+Defines tools and resources once with the MCP TypeScript SDK and Zod schemas. The same router is mounted twice:
+- **Internal mount (worker)**: mounted by the agent-run worker on a localhost-only port; the orchestrator connects with the AI SDK's MCP client and signs the run identity (user, org, run, dashboard) into every call via HMAC headers (`INTERNAL_MCP_SECRET`, min 32 chars, no default).
+- **External mount (API)**: mounted at `/mcp` on the API; authenticated by personal access tokens (`gph_live_...`, sha256-hashed, scoped, revocable, optional expiry) with per-token rate limiting and connected-client tracking. OAuth 2.1 arrives in Phase 10.
+- Both mounts converge on the same ToolContext: the caller's membership role, tenant checks in every tool, audit entries for writes (`actor_type` `agent` or `mcp`), and dashboard events so open browsers update live.
 
 ### 3.6 packages/chart-spec
 Zod schemas and TypeScript types shared by frontend, API, MCP server, and agent. This package is the contract that keeps AI output safe to render.

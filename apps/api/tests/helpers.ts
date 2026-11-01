@@ -56,7 +56,7 @@ export interface TestApp {
 }
 
 export async function startTestApp(
-  opts?: { agentTokenBudget?: number; redisDb?: number },
+  opts?: { agentTokenBudget?: number; redisDb?: number; mcpTokenRateLimit?: number },
 ): Promise<TestApp> {
   loadEnv();
   const adminUrl = requireEnv("DATABASE_ADMIN_URL");
@@ -182,6 +182,19 @@ export async function startTestApp(
 
   const { app } = createApp(deps, {
     allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    // The API's external MCP mount (Phase 7): same router the production API
+    // uses; the harness points it at the in-process data service.
+    mcp: {
+      db,
+      sql,
+      redis,
+      getDataClient: () => {
+        dataClientLazy ??= createDataClient(`127.0.0.1:${dataPort}`);
+        return dataClientLazy;
+      },
+      secret: mcpSecret,
+      tokenRateLimitPerMin: opts?.mcpTokenRateLimit ?? 120,
+    },
     rest: {
       storage,
       bucket: TEST_BUCKET,

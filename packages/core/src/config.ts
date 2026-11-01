@@ -59,6 +59,7 @@ export const limitsSchema = z.object({
   STATEMENT_TIMEOUT_MS: z.coerce.number().int().default(10_000),
   AGENT_TOKEN_BUDGET: z.coerce.number().int().default(200_000),
   AGENT_RUN_CONCURRENCY: z.coerce.number().int().default(2),
+  MCP_TOKEN_RATE_LIMIT: z.coerce.number().int().default(120),
 });
 
 export type LimitsEnv = z.output<typeof limitsSchema>;

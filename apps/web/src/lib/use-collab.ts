@@ -48,6 +48,8 @@ export function useCollab(dashboardId: string, enabled = true): {
   dragging: Record<string, DragUpdate>;
   remoteLayout: RemoteLayout | null;
   chartVersionEvent: { chartId: string; version: number } | null;
+  /** A chart was added to (or removed from) the dashboard; refetch it. */
+  chartAddedEvent: { chartId: string; at: number } | null;
   sendCursor: (x: number, y: number) => void;
   sendDrag: (chartId: string, x: number, y: number, state: "start" | "move" | "end") => void;
 } {
@@ -59,6 +61,7 @@ export function useCollab(dashboardId: string, enabled = true): {
   const [dragging, setDragging] = useState<Record<string, DragUpdate>>({});
   const [remoteLayout, setRemoteLayout] = useState<RemoteLayout | null>(null);
   const [chartVersionEvent, setChartVersionEvent] = useState<{ chartId: string; version: number } | null>(null);
+  const [chartAddedEvent, setChartAddedEvent] = useState<{ chartId: string; at: number } | null>(null);
 
   useEffect(() => {
     if (!enabled || !dashboardId) return;
@@ -100,6 +103,11 @@ export function useCollab(dashboardId: string, enabled = true): {
         }
       },
     );
+    socket.on("chart:added", (data: { chartId?: string }) => {
+      if (data.chartId) {
+        setChartAddedEvent({ chartId: data.chartId, at: Date.now() });
+      }
+    });
 
     const interval = setInterval(() => {
       if (socket.connected) {
@@ -123,5 +131,5 @@ export function useCollab(dashboardId: string, enabled = true): {
     socketRef.current?.emit("chart:drag", { dashboardId, chartId, x, y, state });
   }
 
-  return { connected, selfId, presence, cursors, dragging, remoteLayout, chartVersionEvent, sendCursor, sendDrag };
+  return { connected, selfId, presence, cursors, dragging, remoteLayout, chartVersionEvent, chartAddedEvent, sendCursor, sendDrag };
 }

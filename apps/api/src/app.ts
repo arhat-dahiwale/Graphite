@@ -11,11 +11,13 @@ import { parseAllowedOrigins } from "@graphite/core/config";
 import { createContext, type AppDeps, type SessionUser } from "./context";
 import { appRouter } from "./routers/index";
 import { invitationsRestRouter } from "./rest/invitations";
+import { integrationsRestRouter } from "./rest/integrations";
 import { datasetsRestRouter } from "./rest/datasets";
 import { datasetRestRouter } from "./rest/datasets-query";
 import { eventsRestRouter } from "./rest/events";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { Queue } from "bullmq";
+import { createMcpRouter, type McpRouterDeps } from "@graphite/mcp-server/server";
 
 interface AuthedRequest extends Request {
   graphiteUser?: SessionUser | null;
@@ -36,13 +38,20 @@ export interface RestExtras {
   statementTimeoutMs: number;
 }
 
+export interface AppOptions {
+  allowedOrigins?: string[];
+  rest?: RestExtras;
+  /** External MCP mount at /mcp (Streamable HTTP, PAT auth). */
+  mcp?: McpRouterDeps;
+}
+
 /**
  * Build the API app. All service handles are injected so tests can run the
  * app against isolated databases and Redis instances.
  */
 export function createApp(
   deps: AppDeps,
-  opts?: { allowedOrigins?: string[]; rest?: RestExtras },
+  opts?: AppOptions,
 ): CreatedApp {
   const app = express();
   app.disable("x-powered-by");
@@ -90,6 +99,12 @@ export function createApp(
     res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "down", checks });
   });
 
+  // External MCP server at /mcp (Streamable HTTP, stateless): personal access
+  // token auth; shares tool implementations with the worker's internal mount.
+  if (opts?.mcp) {
+    app.use(createMcpRouter(opts.mcp));
+  }
+
   // Better Auth handles /api/auth/* (sign-up, sign-in, sign-out, session).
   if (deps.auth) {
     app.use("/api/auth", (req, res, next) => {
@@ -112,6 +127,7 @@ export function createApp(
   // REST routers (AppError -> API.md JSON via the error handler below).
   app.use("/api/v1", invitationsRestRouter(deps));
   app.use("/api/v1", eventsRestRouter(deps));
+  app.use("/api/v1", integrationsRestRouter(deps));
   if (opts?.rest) {
     app.use(
       "/api/v1",

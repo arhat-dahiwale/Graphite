@@ -5,16 +5,11 @@ import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
 import type Redis from "ioredis";
 import type { DataClient } from "@graphite/data/client";
-import { createHash } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { mcpTokens } from "@graphite/db/schema";
-import { childLogger } from "@graphite/core";
+import { childLogger, isAppError } from "@graphite/core";
 import type { ToolContext } from "./context.js";
-import {
-  assertInternalMcpSecret,
-  verifyInternalContext,
-  type InternalContext,
-} from "./internal-auth.js";
+import { assertInternalMcpSecret, verifyInternalContext } from "./internal-auth.js";
 import {
   addChartToDashboard,
   addChartToDashboardInput,
@@ -37,6 +32,13 @@ import {
   updateChartSpec,
   updateChartSpecInput,
 } from "./tools/index.js";
+import { actorForUser } from "./context.js";
+import {
+  checkTokenRateLimit,
+  resolveMcpToken,
+  trackMcpClient,
+} from "./tokens.js";
+import { ALL_SCOPES, TOOL_SCOPES, hasScope, type McpScope } from "./scopes.js";
 
 const log = childLogger({ component: "mcp-server" });
 
@@ -46,10 +48,15 @@ export interface McpRouterDeps {
   redis: Redis;
   getDataClient: () => DataClient;
   secret: string;
+  /** Per-token rate limit (req/min). Default 120 per API.md. */
+  tokenRateLimitPerMin?: number;
 }
 
 interface ResolvedIdentity {
   actor: ToolContext["actor"];
+  /** Scopes granted to this caller (all scopes for the internal agent). */
+  scopes: McpScope[];
+  tokenId?: string;
   agentRunId?: string;
   defaultDashboardId?: string;
   requestId: string;
@@ -58,22 +65,21 @@ interface ResolvedIdentity {
 async function resolveIdentity(deps: McpRouterDeps, req: Request): Promise<ResolvedIdentity> {
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer gph_live_")) {
-    // External MCP client (personal access token, Phase 7 UI): token is shown
-    // once and stored hashed.
+    // External MCP client (personal access token): hashed storage, shown once.
     const token = auth.slice("Bearer ".length);
-    const tokenHash = createHash("sha256").update(token).digest("hex");
-    const rows = await deps.db
-      .select()
-      .from(mcpTokens)
-      .where(and(eq(mcpTokens.tokenHash, tokenHash), isNull(mcpTokens.revokedAt)))
-      .limit(1);
-    const t = rows[0];
-    if (!t || (t.expiresAt !== null && t.expiresAt.getTime() < Date.now())) {
-      throw Object.assign(new Error("Invalid or expired token"), { status: 401 });
+    const t = await resolveMcpToken(deps.db, token);
+    if (!t) {
+      throw Object.assign(new Error("Invalid, expired, or revoked token"), { status: 401 });
     }
+    // Rate limit before any other work.
+    await checkTokenRateLimit(deps.redis, t.id, deps.tokenRateLimitPerMin ?? 120);
+    // Real membership role (viewer tokens act as viewers).
+    const actor = await actorForUser(deps.db, t.userId, t.organizationId);
     await deps.db.update(mcpTokens).set({ lastUsedAt: new Date() }).where(eq(mcpTokens.id, t.id));
     return {
-      actor: { userId: t.userId, orgId: t.organizationId, role: "editor" },
+      actor,
+      scopes: t.scopes,
+      tokenId: t.id,
       requestId: `mcp_${crypto.randomUUID()}`,
     };
   }
@@ -83,15 +89,13 @@ async function resolveIdentity(deps: McpRouterDeps, req: Request): Promise<Resol
     req.headers["x-graphite-internal-signature"] as string | undefined,
     deps.secret,
   );
-  return toIdentity(internal);
-}
-
-function toIdentity(ctx: InternalContext): ResolvedIdentity {
+  const actor = await actorForUser(deps.db, internal.userId, internal.orgId);
   return {
-    actor: { userId: ctx.userId, orgId: ctx.orgId, role: "editor" },
-    agentRunId: ctx.runId,
-    defaultDashboardId: ctx.dashboardId,
-    requestId: ctx.requestId,
+    actor,
+    scopes: ALL_SCOPES,
+    agentRunId: internal.runId,
+    defaultDashboardId: internal.dashboardId,
+    requestId: internal.requestId,
   };
 }
 
@@ -131,10 +135,25 @@ export function createMcpRouter(deps: McpRouterDeps): Router {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       execute: (input: any) => Promise<unknown>,
     ): void => {
+      const requiredScope = TOOL_SCOPES[name];
       server.registerTool(
         name,
         { description, inputSchema: schema.shape },
         async (args: unknown) => {
+          // Scope gate: external tokens without the scope never reach the tool.
+          if (!hasScope(identity.scopes, requiredScope)) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    error: `Missing scope: ${requiredScope ?? "unknown"} (token scopes: ${identity.scopes.join(", ") || "none"})`,
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
           try {
             const result = await execute(args);
             return {
@@ -219,6 +238,20 @@ export function createMcpRouter(deps: McpRouterDeps): Router {
   router.post("/mcp", async (req: Request, res: Response, next: NextFunction) => {
     try {
       const identity = await resolveIdentity(deps, req);
+      // Connected-client tracking (external tokens): the initialize request
+      // carries the MCP clientInfo.
+      if (identity.tokenId && req.body?.method === "initialize") {
+        const info = req.body?.params?.clientInfo as
+          | { name?: string; version?: string }
+          | undefined;
+        if (info?.name) {
+          await trackMcpClient(deps.db, {
+            tokenId: identity.tokenId,
+            clientName: String(info.name).slice(0, 120),
+            clientVersion: info.version ? String(info.version).slice(0, 60) : undefined,
+          });
+        }
+      }
       const server = buildServer(identity);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
@@ -231,6 +264,28 @@ export function createMcpRouter(deps: McpRouterDeps): Router {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (e) {
+      const retryAfter = (e as { retryAfterSeconds?: number }).retryAfterSeconds;
+      if (retryAfter !== undefined) {
+        res.setHeader("Retry-After", String(retryAfter));
+      }
+      if (isAppError(e)) {
+        const httpStatus: Record<string, number> = {
+          BAD_REQUEST: 400,
+          UNAUTHORIZED: 401,
+          FORBIDDEN: 403,
+          NOT_FOUND: 404,
+          CONFLICT: 409,
+          PAYLOAD_TOO_LARGE: 413,
+          UNPROCESSABLE: 422,
+          RATE_LIMITED: 429,
+          QUOTA_EXCEEDED: 429,
+          INTERNAL: 500,
+        };
+        res.status(httpStatus[e.code] ?? 500).json({
+          error: { code: e.code, message: e.message, requestId: "", details: e.details ?? {} },
+        });
+        return;
+      }
       const status = (e as { status?: number }).status ?? 401;
       if (status === 401) {
         res.status(401).json({

@@ -37,8 +37,10 @@ export const envSchema = limitsSchema
         { message: "CORS_ORIGINS cannot contain '*' (credentials are enabled)" },
       )
       .optional(),
-    // Signs/verifies the internal MCP identity headers when the API mounts MCP.
-    INTERNAL_MCP_SECRET: z.string().min(32).optional(),
+    // Signs/verifies the internal MCP identity headers; the API mounts the
+    // external MCP server on the same tool implementations, so it verifies
+    // too. Required: startup fails when missing or shorter than 32 chars.
+    INTERNAL_MCP_SECRET: z.string().min(32),
   });
 
 export type Env = z.output<typeof envSchema>;

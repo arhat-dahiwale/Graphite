@@ -75,6 +75,14 @@ async function main(): Promise<void> {
     },
     {
       allowedOrigins: parseAllowedOrigins(env.CORS_ORIGINS),
+      mcp: {
+        db,
+        sql,
+        redis,
+        getDataClient,
+        secret: env.INTERNAL_MCP_SECRET,
+        tokenRateLimitPerMin: env.MCP_TOKEN_RATE_LIMIT,
+      },
       rest: {
         storage,
         bucket: env.S3_BUCKET,

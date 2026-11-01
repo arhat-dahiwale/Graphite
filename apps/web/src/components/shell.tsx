@@ -57,6 +57,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             >
               Members &amp; invites
             </Link>
+            <Link
+              href="/app/integrations"
+              className="block rounded-md px-2 py-1.5 text-zinc-300 hover:bg-zinc-900"
+            >
+              Integrations (MCP)
+            </Link>
           </nav>
           <div className="mt-auto text-xs text-zinc-500">
             {session.user.email}

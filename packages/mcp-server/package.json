@@ -7,7 +7,9 @@
     "./tools": "./src/tools/index.ts",
     "./context": "./src/context.ts",
     "./server": "./src/server.ts",
-    "./internal-auth": "./src/internal-auth.ts"
+    "./internal-auth": "./src/internal-auth.ts",
+    "./tokens": "./src/tokens.ts",
+    "./scopes": "./src/scopes.ts"
   },
   "scripts": {
     "lint": "eslint .",

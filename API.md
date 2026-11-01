@@ -117,10 +117,12 @@ event: error       data: {"message":"..."}
 ### Integrations (MCP tokens)
 | Method | Path | Role | Description |
 |---|---|---|---|
-| GET | `/api/v1/orgs/:orgId/mcp/tokens` | editor | List own tokens (prefix, scopes, last used) |
+| GET | `/api/v1/orgs/:orgId/mcp/tokens` | viewer | List own tokens (prefix, scopes, last used; never the hash or plaintext) |
 | POST | `/api/v1/orgs/:orgId/mcp/tokens` | editor | Create token; plaintext returned once |
-| DELETE | `/api/v1/orgs/:orgId/mcp/tokens/:tokenId` | editor | Revoke |
-| GET | `/api/v1/orgs/:orgId/mcp/clients` | editor | Connected clients |
+| DELETE | `/api/v1/orgs/:orgId/mcp/tokens/:tokenId` | editor | Revoke (token owner only) |
+| GET | `/api/v1/orgs/:orgId/mcp/clients` | viewer | Connected MCP clients seen on the caller's tokens |
+
+The same capabilities are available as tRPC `integration.listTokens|createToken|revokeToken|listClients` (used by the Integrations page).
 
 **Create token**
 ```json
@@ -323,11 +325,15 @@ Errors map to gRPC status codes: `INVALID_ARGUMENT` (rejected SQL), `DEADLINE_EX
 
 ## 6. MCP server
 
-- Endpoint: `POST|GET|DELETE /mcp` (Streamable HTTP)
-- Auth: `Authorization: Bearer gph_live_...` (OAuth 2.1 in Phase 10)
-- Identity: every call runs as the token's user within the token's organization and scopes
-- Internal agent: the orchestrator connects to the internal MCP server (mounted in the worker on WORKER_INTERNAL_MCP_PORT) through the @ai-sdk/mcp client; identity (user, org, run, dashboard) travels in HMAC-signed `x-graphite-internal-context`/`-signature` headers so every tool call executes with the run's identity
-- External token auth (gph_live_...) is already accepted by the same endpoint; the Integrations UI arrives in Phase 7
+- External endpoint: `POST|GET|DELETE /mcp` on the API (Streamable HTTP, stateless mode), mounted in `apps/api`
+- Internal endpoint: the same MCP router mounted in the worker on `WORKER_INTERNAL_MCP_PORT` (localhost-only), used by the orchestrator
+- Auth (external): `Authorization: Bearer gph_live_...` personal access token; both mounts share the tool implementations and the same ToolContext, so authorization, audit logging, and event publishing are identical
+- Identity: every call runs as the token's user within the token's organization and scopes; the caller's real membership role applies (a viewer's token acts as a viewer)
+- Scopes: each tool requires one of `datasets:read`, `charts:read`, `charts:write`; a token missing the scope gets an `isError` result naming the missing scope
+- Revocation/expiry: a revoked or expired token is rejected on the very next request (401)
+- Rate limit: per token, `MCP_TOKEN_RATE_LIMIT` req/min (default 120); over the limit returns 429 with `Retry-After`
+- Client tracking: the `initialize` request's `clientInfo` upserts an `mcp_clients` row shown on the Integrations page
+- Internal agent: the orchestrator connects to the worker's MCP mount through the @ai-sdk/mcp client; identity (user, org, run, dashboard) travels in HMAC-signed `x-graphite-internal-context`/`-signature` headers (`INTERNAL_MCP_SECRET`, min 32 chars) so every tool call executes with the run's identity
 
 ### Tools
 
