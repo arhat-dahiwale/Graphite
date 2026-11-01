@@ -34,6 +34,9 @@ const envSchema = z.object({
   INGESTION_CONCURRENCY: z.coerce.number().int().default(1),
   AGENT_TOKEN_BUDGET: z.coerce.number().int().default(200_000),
   AGENT_RUN_CONCURRENCY: z.coerce.number().int().default(2),
+  // Which queues this process runs: comma-separated from ingestion,agent-run.
+  // Separate k8s deployments run one queue each so they scale independently.
+  WORKER_QUEUES: z.string().default("ingestion,agent-run"),
   LLM_PROVIDER: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().optional(),
@@ -87,24 +90,33 @@ async function main(): Promise<void> {
     log.info({ port: env.WORKER_INTERNAL_MCP_PORT }, "internal MCP server listening");
   });
 
+  const queueSelection = env.WORKER_QUEUES.split(",").map((q) => q.trim());
   const workers = [
-    startIngestionWorker({
-      connection: redis,
-      db,
-      sql,
-      storage,
-      bucket: env.S3_BUCKET,
-      concurrency: env.INGESTION_CONCURRENCY,
-    }),
-    startAgentRunWorker({
-      connection: redis,
-      db,
-      sql,
-      mcpBaseUrl: `http://127.0.0.1:${env.WORKER_INTERNAL_MCP_PORT}`,
-      mcpSecret: env.INTERNAL_MCP_SECRET,
-      tokenBudget: env.AGENT_TOKEN_BUDGET,
-      concurrency: env.AGENT_RUN_CONCURRENCY,
-    }),
+    ...(queueSelection.includes("ingestion")
+      ? [
+          startIngestionWorker({
+            connection: redis,
+            db,
+            sql,
+            storage,
+            bucket: env.S3_BUCKET,
+            concurrency: env.INGESTION_CONCURRENCY,
+          }),
+        ]
+      : []),
+    ...(queueSelection.includes("agent-run")
+      ? [
+          startAgentRunWorker({
+            connection: redis,
+            db,
+            sql,
+            mcpBaseUrl: `http://127.0.0.1:${env.WORKER_INTERNAL_MCP_PORT}`,
+            mcpSecret: env.INTERNAL_MCP_SECRET,
+            tokenBudget: env.AGENT_TOKEN_BUDGET,
+            concurrency: env.AGENT_RUN_CONCURRENCY,
+          }),
+        ]
+      : []),
   ];
 
   // Health endpoint: the worker's operational surface.

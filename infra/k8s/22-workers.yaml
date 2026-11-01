@@ -18,12 +18,12 @@ spec:
         - name: worker
           image: graphite-worker:local
           imagePullPolicy: IfNotPresent
-          command: ["pnpm", "--filter", "@graphite/worker", "start"]
+          command: ["node", "node_modules/tsx/dist/cli.mjs", "src/index.ts"]
           env:
             - name: INGESTION_CONCURRENCY
               value: "2"
-            - name: AGENT_RUN_CONCURRENCY
-              value: "0" # this deployment ingests only
+            - name: WORKER_QUEUES
+              value: "ingestion" # this deployment ingests only
           envFrom:
             - configMapRef: { name: graphite-config }
             - secretRef: { name: graphite-secrets }
@@ -65,10 +65,12 @@ spec:
         - name: worker
           image: graphite-worker:local
           imagePullPolicy: IfNotPresent
-          command: ["pnpm", "--filter", "@graphite/worker", "start"]
+          command: ["node", "node_modules/tsx/dist/cli.mjs", "src/index.ts"]
           env:
             - name: AGENT_RUN_CONCURRENCY
               value: "2"
+            - name: WORKER_QUEUES
+              value: "agent-run" # this deployment runs agent runs only
           envFrom:
             - configMapRef: { name: graphite-config }
             - secretRef: { name: graphite-secrets }

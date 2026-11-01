@@ -199,3 +199,19 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** full suite 141 green (telemetry 7, api 80 incl. rate-limits 4 + sql-injection-e2e 2); lint + typecheck clean
 **Decisions:** explicit spans instead of relying on AI SDK internals for LLM/tool/SQL spans; gRPC propagation via metadata (auto grpc instrumentation not hooking under tsx); dashboards reference Prometheus/Tempo by static UID
 **Follow-ups:** Loki (logs) intentionally out of scope; alerting rules not configured (dashboards only)
+
+### 2026-11-02 03:45 | GLM-5.3-Flash (overnight run) | Phase 9
+**Task:** Kubernetes and CI/CD — Dockerfiles, manifests, CI, Playwright, load test, kind attempt
+**Summary:**
+- Dockerfiles for web/api/worker/data (multi-stage, non-root node user, pinned node:22.20.0-alpine3.22 + pnpm 12.8.1; web uses Next standalone). All four images built and container-verified: /healthz + /readyz respond on the compose network (api container needed `chmod -R a+rX` + direct `node tsx cli.mjs` CMD because pnpm re-chmods .bin shims as non-root and fails)
+- K8s manifests (infra/k8s): namespace, ConfigMap, clearly-fake Secrets, postgres/redis StatefulSets + MinIO deployment, Deployments+Services for web/api/data (probes on /readyz,/healthz), CPU HPAs, two queue-dedicated worker deployments (WORKER_QUEUES env added to the worker for this), KEDA ScaledObjects for both queues, nginx Ingress (WebSocket + sticky), migration Job, maintenance CronJob. All files pass kubeconform -strict
+- CI: checks (+minio, read-only DB env), k8s-manifests (kubeconform), e2e job (Playwright against compose services), docker build job (push defined but gated to main, never executed here)
+- Playwright: chromium installed, e2e covers sign-up -> org -> project -> CSV upload -> dashboard -> mock agent run -> 3 agent charts on canvas. PASSED locally (1.1 min) against the dev stack after fixing test selectors (projects/dashboards don't auto-navigate; dataset list needs reload polling)
+- Load test: infra/loadtest/k6-load-test.js (ramp to 50 VUs, thresholds) + README; autocannon smoke (18k req/10s, no errors)
+- KIND ATTEMPT (single, ~28 min): cluster created, images loaded, manifests applied, migration Job completed, maintenance CronJob ran, ALL pods Running. Full product flow verified in-cluster via NodePort: sign-up -> org -> project -> upload -> mock agent run succeeded. Worker scaling: kubectl scaled worker-ingestion 1->3 under an 8x100k-row burst; three distinct pods processed datasets in parallel; api/web untouched at 2 replicas
+- Fixed en route: API_PORT missing from ConfigMap (zod coerce+default NaN), AGENT_RUN_CONCURRENCY=0 rejected by BullMQ (queue-selective worker mode added)
+**Files changed:** {apps/{web,api,worker},services/data}/Dockerfile, .dockerignore, infra/k8s/*, infra/loadtest/*, .github/workflows/ci.yml, apps/web (playwright config + e2e), apps/worker (WORKER_QUEUES, maintenance.ts), package.json test:e2e
+**Docs updated:** PHASES.md
+**Tests:** e2e 1 passed; kubeconform clean; images healthy; full vitest suite still green (141) as of Phase 8 commit
+**Decisions:** kind on host port 30080 (NodePort) after kubectl port-forward proved unreliable for multipart uploads; manual scale used for the scaling proof (KEDA operator install blocked by network)
+**Follow-ups:** KEDA automatic queue-depth scaling deferred (line in PHASES.md); HPA CPU targets need metrics-server on kind (not installed here); CI e2e/push jobs never executed in this environment
