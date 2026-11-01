@@ -157,6 +157,8 @@ export function setupCollab(opts: CollabOptions): SocketServer {
     socket.on("presence:update", async (raw) => {
       const parsed = presenceInput.safeParse(raw);
       if (!parsed.success || !user) return;
+      // Only sockets that joined (membership-checked) may write presence.
+      if (!socket.data.joinedDashboards.has(parsed.data.dashboardId)) return;
       await opts.redis.hset(
         presenceKey(parsed.data.dashboardId),
         socket.id,
@@ -171,6 +173,9 @@ export function setupCollab(opts: CollabOptions): SocketServer {
     socket.on("cursor:move", (raw) => {
       const parsed = cursorInput.safeParse(raw);
       if (!parsed.success || !user) return;
+      // Relays only for dashboards this socket joined (join checks membership),
+      // so cross-tenant payloads can never reach another org's room.
+      if (!socket.data.joinedDashboards.has(parsed.data.dashboardId)) return;
       // Throttle to ~30 Hz per connection.
       const now = Date.now();
       if (now - socket.data.lastCursorAt < 33) return;
@@ -183,6 +188,7 @@ export function setupCollab(opts: CollabOptions): SocketServer {
     socket.on("chart:drag", (raw) => {
       const parsed = dragInput.safeParse(raw);
       if (!parsed.success || !user) return;
+      if (!socket.data.joinedDashboards.has(parsed.data.dashboardId)) return;
       socket.to(`dashboard:${parsed.data.dashboardId}`).emit("chart:drag", {
         userId: user.id,
         name: user.name,
