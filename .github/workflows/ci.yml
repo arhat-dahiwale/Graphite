@@ -31,11 +31,26 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      minio:
+        image: bitnamilegacy/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     env:
       DATABASE_URL: postgres://graphite_app:app_password@localhost:5432/graphite
       DATABASE_ADMIN_URL: postgres://graphite:graphite@localhost:5432/graphite
+      DATABASE_READONLY_URL: postgres://graphite_readonly:readonly_password@localhost:5432/graphite
       REDIS_URL: redis://localhost:6379
+      S3_ENDPOINT: http://localhost:9000
       BETTER_AUTH_SECRET: ci-secret-not-used-in-production
+      INTERNAL_MCP_SECRET: ci-internal-mcp-secret-0123456789abcdef
       INTEGRATION: "1"
       LLM_PROVIDER: mock
     steps:
@@ -53,3 +68,99 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+
+  k8s-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Kubernetes manifests
+        run: |
+          curl -sL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+          tar -xzf kubeconform.tar.gz
+          for f in infra/k8s/*.yaml; do
+            ./kubeconform -strict -ignore-missing-schemas "$f"
+          done
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: graphite
+          POSTGRES_PASSWORD: graphite
+          POSTGRES_DB: graphite
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U graphite -d graphite"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      minio:
+        image: bitnamilegacy/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9002:9000
+        options: >-
+          --health-cmd "mc ready local"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://graphite_app:app_password@localhost:5433/graphite
+      DATABASE_ADMIN_URL: postgres://graphite:graphite@localhost:5433/graphite
+      DATABASE_READONLY_URL: postgres://graphite_readonly:readonly_password@localhost:5433/graphite
+      REDIS_URL: redis://localhost:6380
+      S3_ENDPOINT: http://localhost:9002
+      BETTER_AUTH_SECRET: ci-secret-not-used-in-production
+      INTERNAL_MCP_SECRET: ci-internal-mcp-secret-0123456789abcdef
+      LLM_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:setup
+      - run: pnpm db:migrate
+      - run: pnpm --filter @graphite/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [checks]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build all images
+        run: |
+          docker build -f apps/web/Dockerfile -t graphite-web:${{ github.sha }} .
+          docker build -f apps/api/Dockerfile -t graphite-api:${{ github.sha }} .
+          docker build -f apps/worker/Dockerfile -t graphite-worker:${{ github.sha }} .
+          docker build -f services/data/Dockerfile -t graphite-data:${{ github.sha }} .
+      # Pushing is intentionally defined but gated to main; it never runs on
+      # feature branches. Configure the registry login here (e.g. GHCR with
+      # secrets.GITHUB_TOKEN) and replace this echo with the push commands.
+      - name: Push images (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "Registry login + push commands go here (see README > Deployment)."

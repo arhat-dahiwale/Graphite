@@ -15,7 +15,8 @@
     "test:watch": "turbo run test:watch",
     "db:generate": "pnpm --filter @graphite/db run generate",
     "db:migrate": "pnpm --filter @graphite/db run migrate",
-    "db:setup": "pnpm --filter @graphite/db run setup"
+    "db:setup": "pnpm --filter @graphite/db run setup",
+    "test:e2e": "pnpm --filter @graphite/web exec playwright test"
   },
   "devDependencies": {
     "eslint": "^10.14.0",

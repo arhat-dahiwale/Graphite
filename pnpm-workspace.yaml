@@ -6,6 +6,7 @@ minimumReleaseAgeExclude:
   - bullmq@6.5.3
 
 onlyBuiltDependencies:
+  - playwright
   - esbuild
   - msgpackr-extract
   - protobufjs
