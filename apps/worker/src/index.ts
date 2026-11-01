@@ -143,35 +143,29 @@ async function main(): Promise<void> {
     labelNames: ["queue"] as const,
     registers: [registry],
   });
-  let depthTimer: NodeJS.Timeout | undefined;
-  health.get("/metrics", async (_req, res) => {
+  const refreshQueueDepth = async (): Promise<void> => {
     try {
       for (const name of ["ingestion", "agent-run"]) {
         const counts = await new (await import("bullmq")).Queue(name, { connection: redis }).getJobCounts("waiting");
         queueDepth.labels(name).set(counts.waiting ?? 0);
       }
+    } catch {
+      // metrics best-effort
+    }
+  };
+  const depthTimer = setInterval(() => {
+    void refreshQueueDepth();
+  }, 10_000);
+  depthTimer.unref();
+  health.get("/metrics", async (_req, res) => {
+    try {
+      await refreshQueueDepth();
       res.setHeader("content-type", "text/plain; version=0.0.4; charset=utf-8");
       res.send(await renderMetrics());
     } catch {
       res.status(500).end();
-    } finally {
-      clearInterval(depthTimer);
     }
   });
-  // Refresh queue depth periodically for scrape independence.
-  depthTimer = setInterval(() => {
-    void (async () => {
-      try {
-        for (const name of ["ingestion", "agent-run"]) {
-          const counts = await new (await import("bullmq")).Queue(name, { connection: redis }).getJobCounts("waiting");
-          queueDepth.labels(name).set(counts.waiting ?? 0);
-        }
-      } catch {
-        // metrics best-effort
-      }
-    })();
-  }, 10_000);
-  depthTimer.unref();
   health.listen(env.WORKER_HEALTH_PORT, () => {
     log.info({ port: env.WORKER_HEALTH_PORT }, "worker health endpoint listening");
   });

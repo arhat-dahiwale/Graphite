@@ -149,6 +149,12 @@ export function AgentPanel({
 
   const active = status === "queued" || status === "running";
 
+  // Cost honesty: mock-model runs show simulated (zero) cost.
+  const costNote =
+    model === "mock-scripted"
+      ? "Simulated cost for the deterministic mock model — not real spend. Set LLM_PROVIDER=anthropic for provider-reported cost."
+      : "Provider-reported cost estimate.";
+
   function submit(): void {
     if (!prompt.trim()) return;
     start.mutate({
@@ -255,6 +261,29 @@ export function AgentPanel({
 
       <div className="border-t border-zinc-800 p-3 text-xs text-zinc-500">
         Status: <span className="text-zinc-300">{status}</span>
+        {runQuery.data && (
+          <div className="mt-1 space-y-0.5">
+            <p>
+              Tokens:{" "}
+              <span className="text-zinc-300">
+                {(runQuery.data.run.inputTokens ?? 0).toLocaleString()} in /{" "}
+                {(runQuery.data.run.outputTokens ?? 0).toLocaleString()} out
+              </span>{" "}
+              · Cost:{" "}
+              <span className="text-zinc-300" title={costNote}>
+                ${(Number(runQuery.data.run.costUsd ?? "0")).toFixed(4)}
+              </span>
+            </p>
+            {runQuery.data.run.traceId && (
+              <p title="OpenTelemetry trace id — visible in Grafana/Tempo (observability profile)">
+                Trace:{" "}
+                <span className="font-mono text-[10px] text-zinc-400">
+                  {runQuery.data.run.traceId.slice(0, 16)}…
+                </span>
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

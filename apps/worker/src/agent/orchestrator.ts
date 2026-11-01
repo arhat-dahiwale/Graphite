@@ -17,6 +17,7 @@ import type Redis from "ioredis";
 import type { Sql } from "postgres";
 import { getCurrentVersion } from "@graphite/db/repo/charts";
 import { getDatasetColumns } from "@graphite/db/repo/datasets";
+import { recordRunUsage } from "@graphite/db/repo/usage";
 import { signInternalContext } from "@graphite/mcp-server/internal-auth";
 import { createModel } from "./provider.js";
 import { buildRunUserPrompt, buildSystemPrompt } from "./prompts.js";
@@ -156,6 +157,13 @@ export async function executeRun(deps: OrchestratorDeps, runId: string): Promise
     // Cost figures for mock runs are simulated (0 by design); real-model runs
     // would carry provider pricing here.
     agentCostUsd.inc({ model }, Number(run.costUsd ?? "0") || 0);
+    // Daily usage rollup for org quotas and the usage page.
+    await recordRunUsage(deps.db, {
+      organizationId: run.organizationId,
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      costUsd: Number(run.costUsd ?? "0") || 0,
+    });
   };
 
   try {

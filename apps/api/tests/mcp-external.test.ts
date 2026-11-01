@@ -12,7 +12,6 @@ import { signUp, rest, startTestApp, trpc, uploadCsv, pollUntil, type TestApp } 
 
 let app: TestApp;
 let alice: string;
-let aliceId = "";
 let orgAId = "";
 let projectId = "";
 let datasetId = "";
@@ -75,8 +74,6 @@ beforeAll(async () => {
   orgAId = org.id;
   const project = await trpc<{ id: string }>(app.baseUrl, alice, "project.create", { orgId: orgAId, name: "Ext Project" }, "mutation");
   projectId = project.id;
-  const members = await trpc<Array<{ userId: string; email: string }>>(app.baseUrl, alice, "member.list", { orgId: orgAId });
-  aliceId = members.find((m) => m.email === "ext-mcp-alice@test.example")!.userId;
   const up = await uploadCsv(app.baseUrl, alice, projectId, "ext.csv", "region,revenue\nnorth,120\nsouth,80\neast,60");
   datasetId = up.json.dataset!.id;
   await pollUntil(

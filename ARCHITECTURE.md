@@ -171,12 +171,12 @@ Benefits:
 
 ## 7. Observability
 
-- **OpenTelemetry** SDK in api, worker, and data service. Trace context is propagated through HTTP, gRPC, and BullMQ job data.
-- **Spans**: one trace per agent run, with child spans for each LLM call, tool call, and SQL query (AI SDK telemetry hooks).
-- **Prometheus metrics**: queue depth and job latency, agent run duration, tokens in/out, cost, WebSocket connections, SQL timeouts, request latency.
-- **Grafana**: dashboards for API health, queues, agent runs, and cost. Alerts on queue backlog and error rate.
-- **Tempo** for traces; Loki optional for logs.
-- The in-app **trace viewer** reads from Postgres (`agent_runs`, `agent_steps`) so users can inspect runs without Grafana.
+- **OpenTelemetry** SDK in api, worker, and data service (`packages/telemetry`, enabled by `OTEL_ENABLED=true`). Trace context is propagated through HTTP (auto-instrumentation), gRPC **metadata** (W3C traceparent injected by the data client, extracted in the service `wrap`), and BullMQ **job data** (`traceContext` carrier injected at enqueue, extracted in the worker).
+- **One trace per agent run**: the API request span flows into the job; the worker creates `agent.run`, with child `agent.llm` (the model loop, AI SDK telemetry), `agent.tool <name>` per tool call, `grpc.DataService/*` client spans, and — in the data service — `grpc.server DataService/*` and `sql.query` spans. The trace id is stored in `agent_runs.trace_id` and shown in the in-app run view.
+- **Prometheus metrics** (`prom-client`): `/metrics` on api (4000), worker (4001), data (50052) — HTTP duration, queue depth, job duration, run duration/tokens/runs, WebSocket connections. Queue depth is also refreshed periodically in the worker.
+- **Grafana**: dashboards for API health, queues, agent runs, and (simulated) cost, provisioned from `infra/observability/grafana`. **Tempo** for traces, fed by an OTel collector. All four run as a separate compose file so the base stack stays light: `docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d` (Grafana :3001, Tempo :3218, Prometheus :9132, collector :4317/4318).
+- **Tempo** traces can be fetched by id from the HTTP API (`/api/traces/:id`) — used by the automated end-to-end trace check.
+- The in-app **trace viewer** reads from Postgres (`agent_runs`, `agent_steps`) so users can inspect runs without Grafana; the agent panel footer shows tokens, simulated cost, and the trace id.
 
 ## 8. Deployment
 

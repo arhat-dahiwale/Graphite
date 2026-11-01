@@ -166,21 +166,21 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 8: Observability and hardening
 **Goal:** the system is measurable and safe.
 
-- [ ] OpenTelemetry in api, worker, and data service
-- [ ] Trace context propagated through BullMQ jobs and gRPC metadata
-- [ ] Prometheus metrics: queue depth, job latency, run duration, tokens, cost, WebSocket connections
-- [ ] Grafana dashboards for API health, queues, agent runs, and cost
-- [ ] Tempo for traces
-- [ ] In-app trace viewer with cost display
-- [ ] Rate limiting per user, per token, and per org
-- [ ] Org quotas for agent runs and tokens (`usage_daily`)
-- [ ] Security tests: tenant isolation
-- [ ] Security tests: SQL injection
-- [ ] Security tests: prompt injection fixtures
+- [x] OpenTelemetry in api, worker, and data service
+- [x] Trace context propagated through BullMQ jobs and gRPC metadata
+- [x] Prometheus metrics: queue depth, job latency, run duration, tokens, cost, WebSocket connections
+- [x] Grafana dashboards for API health, queues, agent runs, and cost
+- [x] Tempo for traces
+- [x] In-app trace viewer with cost display
+- [x] Rate limiting per user, per token, and per org
+- [x] Org quotas for agent runs and tokens (`usage_daily`)
+- [x] Security tests: tenant isolation
+- [x] Security tests: SQL injection
+- [x] Security tests: prompt injection fixtures
 
 **Exit criteria**
-- [ ] One agent run is fully traceable end to end in Grafana
-- [ ] Quota and rate limits are enforced and tested
+- [x] One agent run is fully traceable end to end in Grafana (verified: one trace in Tempo spanning api → worker → data service with agent.run/agent.llm/agent.tool N/grpc.DataService/sql.query child spans; Grafana + Tempo + dashboards run in the observability compose profile and the trace is viewable through the provisioned Tempo datasource)
+- [x] Quota and rate limits are enforced and tested
 
 ---
 
@@ -238,6 +238,6 @@ Tick a phase only when every box inside it is checked.
 - [ ] Phase 5: MCP (internal) (done except live-LLM verification)
 - [x] Phase 6: Collaboration
 - [ ] Phase 7: MCP (external) (done except Claude Desktop verification and demo GIF)
-- [ ] Phase 8: Observability
+- [x] Phase 8: Observability
 - [ ] Phase 9: Kubernetes and CI/CD
 - [ ] Phase 10: Polish

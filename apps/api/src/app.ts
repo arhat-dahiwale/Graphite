@@ -150,6 +150,41 @@ export function createApp(
     }
   });
 
+  // Per-user API rate limit (API.md: 300 req/min default). Applies to
+  // /api/v1 and /trpc for session callers; 0 disables. Read per request so
+  // tests (and ops) can tune it without a restart.
+  app.use(async (req: AuthedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userLimit = Number(process.env.USER_REQUESTS_PER_MIN ?? 300);
+      if (
+        userLimit <= 0 ||
+        !req.graphiteUser ||
+        (!req.path.startsWith("/api") && !req.path.startsWith("/trpc"))
+      ) {
+        next();
+        return;
+      }
+      const key = `rl:user:${req.graphiteUser.id}:${Math.floor(Date.now() / 60_000)}`;
+      const count = await deps.redis.incr(key);
+      if (count === 1) await deps.redis.expire(key, 120);
+      if (count > userLimit) {
+        res.setHeader("Retry-After", "60");
+        res.status(429).json({
+          error: {
+            code: "RATE_LIMITED",
+            message: `Rate limit exceeded (${userLimit} req/min)`,
+            requestId: String(res.getHeader("x-request-id") ?? ""),
+            details: {},
+          },
+        });
+        return;
+      }
+      next();
+    } catch {
+      next(); // rate limiter must not break traffic
+    }
+  });
+
   // REST routers (AppError -> API.md JSON via the error handler below).
   app.use("/api/v1", invitationsRestRouter(deps));
   app.use("/api/v1", eventsRestRouter(deps));

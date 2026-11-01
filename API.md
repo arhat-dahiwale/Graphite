@@ -37,12 +37,14 @@ Interfaces: REST, tRPC, Server-Sent Events, WebSocket, gRPC, and MCP. Keep this 
 | `INTERNAL` | 500 | Unexpected error |
 
 ### Rate limits (defaults, configurable)
-| Scope | Limit |
-|---|---|
-| Per user (API) | 300 req/min |
-| Per token (MCP) | 120 req/min |
-| Agent runs per org | 30/hour |
-| Uploads per user | 20/hour |
+| Scope | Limit | Env var |
+|---|---|---|
+| Per user (API) | 300 req/min | `USER_REQUESTS_PER_MIN` |
+| Per token (MCP) | 120 req/min | `MCP_TOKEN_RATE_LIMIT` |
+| Agent runs per org | 30/hour | `ORG_RUNS_PER_HOUR` |
+| Uploads per user | 20/hour | (not yet enforced) |
+
+Over the limit returns HTTP 429 with a `Retry-After` header; tRPC surfaces `TOO_MANY_REQUESTS`, org run quotas `QUOTA_EXCEEDED`.
 
 ---
 
@@ -232,7 +234,7 @@ Agent runs execute in the `agent-run` BullMQ queue with a concurrency limit. The
 `listTokens`, `createToken`, `revokeToken`, `listClients` (wrappers matching the REST endpoints for the UI).
 
 ### `usage`
-`orgSummary` (owner): token usage, cost, run counts by day.
+`orgSummary` (owner): per-day rollups from `usage_daily` (run counts, tokens, cost) plus a `costNote` — `simulated (mock model)` when the deterministic mock model produced the runs, `provider-reported` for real-model runs.
 
 ---
 

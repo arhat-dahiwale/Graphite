@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { newId, notFound, unprocessable } from "@graphite/core";
+import { newId, notFound, quotaExceeded, unprocessable } from "@graphite/core";
 import { agentRuns, agentSteps, conversations, datasets, dashboards, messages } from "@graphite/db/schema";
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { Context } from "../context.js";
@@ -37,6 +37,22 @@ export const runRouter = router({
         const dash = dashRows[0];
         if (!dash || dash.deletedAt) throw notFound();
         await requireAuthorized(ctx, dash.organizationId, "agent:run", { type: "run" });
+
+        // Org quota: agent runs per hour (API.md rate limits). Redis fixed
+        // window keyed by org and hour bucket.
+        const orgRunsPerHour = Number(process.env.ORG_RUNS_PER_HOUR ?? 30);
+        if (orgRunsPerHour > 0) {
+          const hourKey = `rl:org-runs:${dash.organizationId}:${Math.floor(Date.now() / 3_600_000)}`;
+          const count = await ctx.redis.incr(hourKey);
+          if (count === 1) {
+            await ctx.redis.expire(hourKey, 3600);
+          }
+          if (count > orgRunsPerHour) {
+            throw quotaExceeded(
+              `Org agent-run quota reached (${orgRunsPerHour}/hour). Try again later.`,
+            );
+          }
+        }
 
         // Resolve the dataset: explicit, or the first ready dataset in the
         // dashboard's project.

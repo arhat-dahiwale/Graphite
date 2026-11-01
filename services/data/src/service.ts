@@ -2,6 +2,7 @@ import {
   loadPackageDefinition,
   Server,
   status,
+  type Metadata,
   type ServerUnaryCall,
   type sendUnaryData,
   type ServiceDefinition,
@@ -65,12 +66,11 @@ function wrap<TReq, TRes>(methodName: string, fn: Handler<TReq, TRes>) {
   ): void => {
     const parentCtx = propagation.extract(otelContext.active(), call.metadata, {
       // grpc Metadata values are string[]; propagation needs string | string[].
-      get: (carrier: import("@grpc/grpc-js").Metadata, key: string) => {
+      get: (carrier: Metadata, key: string) => {
         const v = carrier.get(key) as unknown;
         return Array.isArray(v) ? (v as string[]) : (v as string | undefined);
       },
-      keys: (carrier: import("@grpc/grpc-js").Metadata) =>
-        Object.keys(carrier.getMap() as Record<string, unknown>),
+      keys: (carrier: Metadata) => Object.keys(carrier.getMap() as Record<string, unknown>),
     });
     const { span, ctx } = startSpanFor(parentCtx, `grpc.server DataService/${methodName}`);
     otelContext.with(ctx, () => fn(call))

@@ -8,6 +8,7 @@ import { dashboardRouter } from "./dashboard";
 import { chartRouter } from "./chart";
 import { runRouter } from "./run";
 import { integrationRouter } from "./integration";
+import { usageRouter } from "./usage";
 
 export const appRouter = router({
   hello: helloRouter,
@@ -19,6 +20,7 @@ export const appRouter = router({
   chart: chartRouter,
   run: runRouter,
   integration: integrationRouter,
+  usage: usageRouter,
 });
 
 export type AppRouter = typeof appRouter;

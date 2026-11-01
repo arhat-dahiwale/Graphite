@@ -184,3 +184,18 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** full suite 128 green (api 74 incl. 9 new external-MCP tests); lint + typecheck clean
 **Decisions:** identity resolution now verifies membership for BOTH paths (internal signed identity resolves the real role; unknown user 404s); Claude Desktop exit criterion ticked for what the scripted client proves, real-desktop verification deferred as a new line
 **Follow-ups:** demo GIF + real Claude Desktop verification deferred to a human; Phase 10 adds OAuth 2.1 alongside tokens
+
+### 2026-11-02 02:35 | GLM-5.3-Flash (overnight run) | Phase 8
+**Task:** Observability and hardening — OTel, Prometheus, Grafana/Tempo, rate limits, quotas
+**Summary:**
+- packages/telemetry: NodeSDK + auto-instrumentations (OTLP exporter, OTEL_ENABLED-gated), prom-client registry; /metrics on api :4000, worker :4001, data :50052
+- ONE TRACE PER AGENT RUN VERIFIED IN TEMPO: api request span -> BullMQ job data (traceparent carrier) -> worker agent.run -> agent.llm (model loop) -> agent.tool <name> per tool call -> grpc.DataService/RunQuery (W3C traceparent in gRPC metadata) -> data-service grpc.server + sql.query. E2E check: mock run via curl, trace_id from agent_runs, Tempo /api/traces/<id> returned 33 spans across all 3 services
+- Observability compose (docker-compose.observability.yml, pinned: prometheus v3.15.1, grafana 12.1.0, tempo 2.10.0, otel-collector-contrib 0.164.0); Grafana :3001 + Tempo :3218 + Prometheus :9132 (3200/9090/9091 blocked by Windows port exclusions); 4 dashboards + datasources provisioned; Prometheus targets api/worker/data UP
+- Rate limits: per-user API (USER_REQUESTS_PER_MIN 300), per-token MCP (120, from Phase 7), org agent-run quota (ORG_RUNS_PER_HOUR 30, QUOTA_EXCEEDED); usage_daily upsert on run finish + usage.orgSummary (owner) router; agent panel shows tokens, simulated cost, trace id (in-app trace viewer)
+- Security tests: tenant isolation (14 across MCP + sockets), SQL injection (sqlcheck unit + new e2e through chart.data: injection payloads stay literals / are rejected, table survives), prompt injection fixtures (worker agent-unit)
+- Fixed: tsx watch hangs under turbo (dev script switched to pnpm -r --parallel --stream); NodeSDK metric push disabled (OTEL_METRICS_EXPORTER=none; Prometheus pull instead); cost_usd text-column upsert cast
+**Files changed:** packages/telemetry (new), apps/{api,worker}, services/data, docker-compose.observability.yml, infra/observability/*, package.json dev script, .env.example
+**Docs updated:** ARCHITECTURE.md (observability), API.md (rate-limit env vars, usage router), PHASES.md
+**Tests:** full suite 141 green (telemetry 7, api 80 incl. rate-limits 4 + sql-injection-e2e 2); lint + typecheck clean
+**Decisions:** explicit spans instead of relying on AI SDK internals for LLM/tool/SQL spans; gRPC propagation via metadata (auto grpc instrumentation not hooking under tsx); dashboards reference Prometheus/Tempo by static UID
+**Follow-ups:** Loki (logs) intentionally out of scope; alerting rules not configured (dashboards only)

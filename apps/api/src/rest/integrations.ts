@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
 import { isAppError } from "@graphite/core";
 import {
   createMcpToken,
@@ -25,7 +25,7 @@ interface AuthedRequest extends Request {
 export function integrationsRestRouter(deps: AppDeps): Router {
   const r = Router();
 
-  const error = (res: import("express").Response, e: unknown): void => {
+  const error = (res: Response, e: unknown): void => {
     if (isAppError(e)) {
       const status: Record<string, number> = {
         BAD_REQUEST: 400,
@@ -107,7 +107,11 @@ export function integrationsRestRouter(deps: AppDeps): Router {
         }),
       });
     } catch (e) {
-      error(res, e) ?? next(e);
+      if (isAppError(e)) {
+        error(res, e);
+        return;
+      }
+      next(e);
     }
   });
 
@@ -154,7 +158,11 @@ export function integrationsRestRouter(deps: AppDeps): Router {
         expiresAt: created.expiresAt,
       });
     } catch (e) {
-      error(res, e) ?? next(e);
+      if (isAppError(e)) {
+        error(res, e);
+        return;
+      }
+      next(e);
     }
   });
 
@@ -174,7 +182,11 @@ export function integrationsRestRouter(deps: AppDeps): Router {
       });
       res.json({ ok: true });
     } catch (e) {
-      error(res, e) ?? next(e);
+      if (isAppError(e)) {
+        error(res, e);
+        return;
+      }
+      next(e);
     }
   });
 
@@ -189,7 +201,11 @@ export function integrationsRestRouter(deps: AppDeps): Router {
         }),
       });
     } catch (e) {
-      error(res, e) ?? next(e);
+      if (isAppError(e)) {
+        error(res, e);
+        return;
+      }
+      next(e);
     }
   });
 
