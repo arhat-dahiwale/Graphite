@@ -9,6 +9,7 @@ import { chartRouter } from "./chart";
 import { runRouter } from "./run";
 import { integrationRouter } from "./integration";
 import { usageRouter } from "./usage";
+import { auditRouter } from "./audit";
 
 export const appRouter = router({
   hello: helloRouter,
@@ -21,6 +22,7 @@ export const appRouter = router({
   run: runRouter,
   integration: integrationRouter,
   usage: usageRouter,
+  audit: auditRouter,
 });
 
 export type AppRouter = typeof appRouter;

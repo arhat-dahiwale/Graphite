@@ -128,6 +128,83 @@ export default function DashboardPage({
     onSuccess: () => utils.dashboard.get.invalidate({ dashboardId }),
   });
 
+  // --- Phase 10: share link, export, dashboard-level filters -------------
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [filterDraft, setFilterDraft] = useState({ field: "", op: "eq", value: "" });
+  const dash = dashboardQuery.data?.dashboard;
+
+  const setShare = trpc.dashboard.setShare.useMutation({
+    onSuccess: (res) => {
+      if (res.shareEnabled && res.shareId) {
+        setShareLink(`${window.location.origin}/share/${res.shareId}`);
+      } else {
+        setShareLink(null);
+      }
+      void utils.dashboard.get.invalidate({ dashboardId });
+    },
+  });
+  const setFilters = trpc.dashboard.setFilters.useMutation({
+    onSuccess: () => utils.dashboard.get.invalidate({ dashboardId }),
+  });
+
+  function exportJson(): void {
+    void fetch(`/api/v1/dashboards/${dashboardId}/export?format=json`, {
+      credentials: "include",
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Export failed (${r.status})`);
+        return r.text();
+      })
+      .then((text) => {
+        const blob = new Blob([text], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `dashboard-${dashboardId}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+  }
+
+  // Ctrl/Cmd+E exports the dashboard JSON.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        exportJson();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardId]);
+
+  type DashFilter = {
+    field: string;
+    op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "like";
+    value: string | number | boolean | (string | number)[];
+  };
+  const currentFilters = (dash?.filters ?? []) as DashFilter[];
+  function applyFilter(): void {
+    if (!filterDraft.field.trim() || filterDraft.value === "") return;
+    const numeric = Number(filterDraft.value);
+    const value =
+      filterDraft.value !== "" && !Number.isNaN(numeric) && filterDraft.value.trim() !== ""
+        ? numeric
+        : filterDraft.value;
+    setFilters.mutate({
+      dashboardId,
+      filters: [
+        ...currentFilters,
+        {
+          field: filterDraft.field.trim(),
+          op: filterDraft.op as DashFilter["op"],
+          value: value as DashFilter["value"],
+        },
+      ],
+    });
+    setFilterDraft({ field: "", op: "eq", value: "" });
+  }
+
   return (
     <div className="flex h-full">
       <div className="mx-auto max-w-7xl flex-1 space-y-4 px-4">
@@ -146,13 +223,110 @@ export default function DashboardPage({
             layout v{layoutVersion}
           </span>
         </div>
-        <button
-          onClick={() => setBuilderOpen(true)}
-          className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
-        >
-          + Add chart
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={exportJson}
+            aria-label="Export dashboard as JSON (Ctrl+E)"
+            title="Export JSON (Ctrl+E)"
+            className="rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900"
+          >
+            Export JSON
+          </button>
+          <button
+            onClick={() => setShare.mutate({ dashboardId, enabled: !(dash?.shareEnabled ?? false) })}
+            aria-label={dash?.shareEnabled ? "Disable public share link" : "Enable public share link"}
+            className={`rounded-md px-3 py-2 text-sm ${
+              dash?.shareEnabled
+                ? "border border-emerald-800 text-emerald-300 hover:bg-emerald-950/40"
+                : "border border-zinc-700 text-zinc-300 hover:bg-zinc-900"
+            }`}
+          >
+            {dash?.shareEnabled ? "Shared (disable)" : "Share"}
+          </button>
+          <button
+            onClick={() => setBuilderOpen(true)}
+            className="rounded-md bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-white"
+          >
+            + Add chart
+          </button>
+        </div>
       </header>
+
+      {shareLink && (
+        <div className="rounded-lg border border-emerald-900 bg-emerald-950/30 px-4 py-2 text-sm">
+          <p className="text-emerald-300">Public link (anyone with it can view):</p>
+          <code className="mt-1 block break-all font-mono text-xs text-emerald-200">{shareLink}</code>
+          <button onClick={() => void navigator.clipboard.writeText(shareLink)} className="mt-1 text-xs text-emerald-300 underline">
+            Copy link
+          </button>
+        </div>
+      )}
+
+      {/* Dashboard-level filters (date range / category). Applied through the
+          chart query compiler on the server; charts re-query via chart.data. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm">
+        <span className="text-xs font-medium uppercase text-zinc-500">Filters</span>
+        {currentFilters.map((f, i) => (
+          <span key={i} className="flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-xs text-zinc-300">
+            <code>
+              {f.field} {f.op} {String(f.value)}
+            </code>
+            <button
+              onClick={() =>
+                setFilters.mutate({
+                  dashboardId,
+                  filters: currentFilters.filter((_, j) => j !== i),
+                })
+              }
+              aria-label={`Remove filter ${f.field}`}
+              className="text-zinc-500 hover:text-red-400"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          value={filterDraft.field}
+          onChange={(e) => setFilterDraft((d) => ({ ...d, field: e.target.value }))}
+          placeholder="column (e.g. region)"
+          aria-label="Filter column"
+          className="w-36 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs"
+        />
+        <select
+          value={filterDraft.op}
+          onChange={(e) => setFilterDraft((d) => ({ ...d, op: e.target.value }))}
+          aria-label="Filter operator"
+          className="rounded-md border border-zinc-700 bg-zinc-950 px-1 py-1 text-xs"
+        >
+          {["eq", "neq", "gt", "gte", "lt", "lte", "like"].map((op) => (
+            <option key={op} value={op}>
+              {op}
+            </option>
+          ))}
+        </select>
+        <input
+          value={filterDraft.value}
+          onChange={(e) => setFilterDraft((d) => ({ ...d, value: e.target.value }))}
+          placeholder="value or date (YYYY-MM-DD)"
+          aria-label="Filter value"
+          className="w-40 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs"
+        />
+        <button
+          onClick={applyFilter}
+          disabled={!filterDraft.field.trim() || filterDraft.value === ""}
+          className="rounded-md border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+        >
+          Apply
+        </button>
+        {currentFilters.length > 0 && (
+          <button
+            onClick={() => setFilters.mutate({ dashboardId, filters: [] })}
+            className="text-xs text-zinc-500 underline hover:text-zinc-300"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
 
       {conflict && (
         <div className="rounded-lg border border-amber-900 bg-amber-950/40 px-4 py-2 text-sm text-amber-200">
@@ -194,6 +368,7 @@ export default function DashboardPage({
                     title={c.chart.title}
                     source={c.version?.source ?? "manual"}
                     versionNumber={c.version?.versionNumber ?? 0}
+                    dashboardId={dashboardId}
                     onRemove={() => removeChart.mutate({ dashboardId, chartId: c.chart.id })}
                     onHistory={() => setHistoryChartId(c.chart.id)}
                     onRemake={() => setRemakeChartId(c.chart.id)}
@@ -255,6 +430,7 @@ function ChartCard({
   onRemove,
   onHistory,
   onRemake,
+  dashboardId,
 }: {
   chartId: string;
   title: string;
@@ -263,8 +439,9 @@ function ChartCard({
   onRemove: () => void;
   onHistory: () => void;
   onRemake: () => void;
+  dashboardId?: string;
 }) {
-  const dataQuery = trpc.chart.data.useQuery({ chartId });
+  const dataQuery = trpc.chart.data.useQuery({ chartId, dashboardId });
   const getQuery = trpc.chart.get.useQuery({ chartId });
   const versionSpec = getQuery.data?.version?.spec as ChartSpec | undefined;
 

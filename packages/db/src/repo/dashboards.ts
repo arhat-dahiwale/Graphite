@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { DbLike } from "../client";
 import { dashboards, dashboardCharts, type Dashboard } from "../schema/index";
+import { newId } from "@graphite/core";
 
 export interface CreateDashboardInput {
   organizationId: string;
@@ -90,6 +91,57 @@ export async function softDeleteDashboard(db: DbLike, organizationId: string, da
     )
     .returning({ id: dashboards.id });
   return rows.length > 0;
+}
+
+/**
+ * Enable/disable the public share link (Phase 10). Enabling generates a new
+ * share id; disabling keeps the id so a re-enable is not a link rotation.
+ * Returns the share id (null when never enabled).
+ */
+export async function setShare(
+  db: DbLike,
+  organizationId: string,
+  dashboardId: string,
+  enabled: boolean,
+): Promise<{ shareId: string | null; shareEnabled: boolean } | null> {
+  const rows = await db
+    .update(dashboards)
+    .set(
+      enabled
+        ? { shareEnabled: true, shareId: newId("share"), updatedAt: new Date() }
+        : { shareEnabled: false, updatedAt: new Date() },
+    )
+    .where(
+      and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.organizationId, organizationId),
+        isNull(dashboards.deletedAt),
+      ),
+    )
+    .returning({ shareId: dashboards.shareId, shareEnabled: dashboards.shareEnabled });
+  const row = rows[0];
+  return row ? { shareId: row.shareId, shareEnabled: row.shareEnabled } : null;
+}
+
+/** Dashboard-level filters (validated by the caller's Zod schema). */
+export async function setFilters(
+  db: DbLike,
+  organizationId: string,
+  dashboardId: string,
+  filters: unknown[] | null,
+): Promise<Dashboard | null> {
+  const rows = await db
+    .update(dashboards)
+    .set({ filters: filters as never, updatedAt: new Date() })
+    .where(
+      and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.organizationId, organizationId),
+        isNull(dashboards.deletedAt),
+      ),
+    )
+    .returning();
+  return rows[0] ?? null;
 }
 
 export interface LayoutItem {

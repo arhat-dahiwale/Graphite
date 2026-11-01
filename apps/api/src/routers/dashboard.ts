@@ -7,6 +7,8 @@ import {
   listDashboardsInProject,
   renameDashboard,
   saveLayout,
+  setFilters,
+  setShare,
   softDeleteDashboard,
 } from "@graphite/db/repo/dashboards";
 import { getProjectById } from "@graphite/db/repo/projects";
@@ -23,6 +25,15 @@ const layoutItemSchema = z.object({
   h: z.number().int().min(1).max(24),
   z: z.number().int().min(0),
 });
+
+/** Same validated shape as chart-spec query filters (field/op/value). */
+export const dashboardFilterSchema = z
+  .object({
+    field: z.string().min(1).max(100),
+    op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "in", "like"]),
+    value: z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))]),
+  })
+  .strict();
 
 /** Resolve a dashboard by id; NOT_FOUND unless the caller is a member. */
 async function resolveDashboard(ctx: Context, dashboardId: string) {
@@ -124,6 +135,38 @@ export const dashboardRouter = router({
         const dash = await resolveDashboard(ctx, input.dashboardId);
         await requireAuthorized(ctx, dash.organizationId, "dashboard:write", { type: "dashboard" });
         return await saveLayout(ctx.db, dash.id, input.baseVersion, input.items);
+      } catch (e) {
+        throw toTrpcError(e);
+      }
+    }),
+
+  // Public share link (Phase 10): enable generates a share id, disable revokes
+  // access. The public payload is served by GET /api/v1/public/dashboards/:shareId.
+  setShare: authedProcedure
+    .input(z.object({ dashboardId: z.string().min(1), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const dash = await resolveDashboard(ctx, input.dashboardId);
+        await requireAuthorized(ctx, dash.organizationId, "dashboard:write", { type: "dashboard" });
+        const result = await setShare(ctx.db, dash.organizationId, dash.id, input.enabled);
+        if (!result) throw notFound();
+        return result;
+      } catch (e) {
+        throw toTrpcError(e);
+      }
+    }),
+
+  // Dashboard-level filters (Phase 10): validated {field,op,value} structure
+  // applied through the chart query compiler — never string-built SQL.
+  setFilters: authedProcedure
+    .input(z.object({ dashboardId: z.string().min(1), filters: z.array(dashboardFilterSchema).max(10) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const dash = await resolveDashboard(ctx, input.dashboardId);
+        await requireAuthorized(ctx, dash.organizationId, "dashboard:write", { type: "dashboard" });
+        const updated = await setFilters(ctx.db, dash.organizationId, dash.id, input.filters);
+        if (!updated) throw notFound();
+        return { ok: true, filters: input.filters };
       } catch (e) {
         throw toTrpcError(e);
       }

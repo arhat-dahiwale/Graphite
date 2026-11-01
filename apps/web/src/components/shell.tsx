@@ -63,6 +63,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             >
               Integrations (MCP)
             </Link>
+            <Link
+              href="/app/audit"
+              className="block rounded-md px-2 py-1.5 text-zinc-300 hover:bg-zinc-900"
+            >
+              Audit log
+            </Link>
           </nav>
           <div className="mt-auto text-xs text-zinc-500">
             {session.user.email}

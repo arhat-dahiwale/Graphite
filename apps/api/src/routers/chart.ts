@@ -225,7 +225,14 @@ export const chartRouter = router({
 
   /** Query results for rendering the current spec (through the data service). */
   data: authedProcedure
-    .input(z.object({ chartId: z.string().min(1) }))
+    .input(
+      z.object({
+        chartId: z.string().min(1),
+        // When given, the dashboard's saved filters are applied on top of the
+        // chart's own query (validated structure, same compiler — Phase 10).
+        dashboardId: z.string().min(1).optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       try {
         const chart = await resolveChart(ctx, input.chartId);
@@ -233,13 +240,39 @@ export const chartRouter = router({
         if (!version) throw notFound("Chart has no version");
         const parsed = safeParseChartSpec(version.spec);
         if (!parsed.ok) throw unprocessable("Stored spec is invalid");
+        let spec = parsed.spec;
+        if (input.dashboardId) {
+          const dash = await getDashboardById(ctx.db, input.dashboardId);
+          if (!dash || dash.deletedAt || dash.organizationId !== chart.organizationId) {
+            throw notFound("Dashboard not found");
+          }
+          const dashFilters = (dash.filters ?? []) as Array<{
+            field: string;
+            op: string;
+            value: unknown;
+          }>;
+          if (dashFilters.length > 0) {
+            // Merge into the spec and RE-VALIDATE the whole spec so the
+            // combined query passes the same compiler + AST gate.
+            const merged = {
+              ...spec,
+              query: {
+                ...spec.query,
+                filter: [...(spec.query.filter ?? []), ...dashFilters].slice(0, 10),
+              },
+            };
+            const revalidated = safeParseChartSpec(merged);
+            if (!revalidated.ok) throw unprocessable("Dashboard filters produced an invalid chart query");
+            spec = revalidated.spec;
+          }
+        }
         const compileDs = await loadCompileDataset(ctx, chart.datasetId);
-        const compiled = compileChartQuery(parsed.spec, compileDs);
+        const compiled = compileChartQuery(spec, compileDs);
         const result = await ctx.getDataClient().runQuery(
           { organizationId: chart.organizationId, userId: ctx.user.id, requestId: ctx.requestId },
           [chart.datasetId],
           compiled.sql,
-          parsed.spec.query.limit ?? 1000,
+          spec.query.limit ?? 1000,
           10_000,
         );
         const rows = result.rows.map((row) =>

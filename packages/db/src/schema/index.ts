@@ -272,6 +272,9 @@ export const dashboards = pgTable(
     layoutVersion: integer("layout_version").notNull().default(1),
     shareId: text("share_id").unique(),
     shareEnabled: boolean("share_enabled").notNull().default(false),
+    // Dashboard-level filters (Phase 10): validated {field,op,value} list
+    // applied on top of each chart's query at read time.
+    filters: jsonb("filters"),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id),
