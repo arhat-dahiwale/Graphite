@@ -31,17 +31,17 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 1: Auth, organizations, projects
 **Goal:** multi-tenant skeleton.
 
-- [ ] Auth with email and OAuth sign-in, plus sessions
-- [ ] Organizations, members, roles (owner, editor, viewer)
-- [ ] Email invitations and accept flow
-- [ ] Projects CRUD
-- [ ] Central `authorize()` helper
-- [ ] Repository layer with tenant filtering
-- [ ] App shell UI: sidebar, org switcher, project list
+- [x] Auth with email and OAuth sign-in, plus sessions
+- [x] Organizations, members, roles (owner, editor, viewer)
+- [x] Email invitations and accept flow
+- [x] Projects CRUD
+- [x] Central `authorize()` helper
+- [x] Repository layer with tenant filtering
+- [x] App shell UI: sidebar, org switcher, project list
 
 **Exit criteria**
-- [ ] Two users in different orgs cannot see each other's data (integration test passes)
-- [ ] Role checks verified for owner, editor, and viewer
+- [x] Two users in different orgs cannot see each other's data (integration test passes)
+- [x] Role checks verified for owner, editor, and viewer
 
 ---
 
@@ -227,7 +227,7 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 Tick a phase only when every box inside it is checked.
 
 - [x] Phase 0: Foundation
-- [ ] Phase 1: Auth, orgs, projects
+- [x] Phase 1: Auth, orgs, projects
 - [ ] Phase 2: CSV ingestion
 - [ ] Phase 3: Manual dashboard
 - [ ] Phase 4: Agent

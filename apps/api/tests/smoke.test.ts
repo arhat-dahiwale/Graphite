@@ -23,7 +23,6 @@ function makeDeps(): AppDeps {
     db: {} as AppDeps["db"],
     sql: stubSql,
     redis: stubRedis,
-    resolveSession: async () => null,
     resolveMembershipRole: async () => null,
   };
 }

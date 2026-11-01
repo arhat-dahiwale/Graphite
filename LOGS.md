@@ -50,3 +50,17 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** core authz/ids 8 passed; api smoke 4 passed (healthz, readyz, tRPC hello, 404 error format); db setup+migrations ran clean on graphite and graphite_test; verified graphite_readonly denied SELECT on public.users
 **Decisions:** MinIO image = `bitnamilegacy/minio` (official `minio/minio` and quay.io removed/blocked in this environment); typescript ~6.0.3 (JS-based; TS 7 is the native compiler, avoided for typescript-eslint compatibility); build scripts for esbuild/msgpackr/protobufjs ignored (postinstalls not required; esbuild binary ships via optional deps)
 **Follow-ups:** none for Phase 0
+
+### 2026-11-01 05:55 | GLM-5.3-Flash (overnight run) | Phase 1
+**Task:** Auth, organizations, members, invitations, projects, app shell UI
+**Summary:**
+- Better Auth 1.7 (email+password, env-gated Google/GitHub OAuth, sessions) mounted at /api/auth/* on Express; field mapping maps better-auth keys onto the DATA.md column names
+- tRPC routers: org (list/create/get/update/delete), member (list/invite/revoke/updateRole/remove/leave/acceptInvite, last-owner protections), project (CRUD, tenant-scoped); REST POST /api/v1/invitations/:token/accept
+- requireAuthorized() wraps core authorize(): no membership -> NOT_FOUND (no cross-tenant existence leak), insufficient role -> FORBIDDEN
+- Web UI: /signin, /signup, /invite/[token], app shell with sidebar + org switcher + project list, members & invites page (console-transport invite link shown); verified in a real browser end to end (sign-up -> org -> project)
+- Integration tests (8): tenant isolation across two orgs, invite accept via tRPC and REST, wrong-email rejection, single-use tokens, role matrix owner/editor/viewer, last-owner protection, unauthenticated rejection
+**Files changed:** apps/api (auth.ts, routers/{org,member,project}.ts, rest/invitations.ts, authz-helpers.ts, mailer.ts), apps/web (signin/signup/invite/app pages, lib/{trpc,providers,auth-client}), apps/api/tests/{helpers,auth-orgs}
+**Docs updated:** API.md (member router details, invite token dev behavior, OAuth note)
+**Tests:** pnpm lint/typecheck/test all green (6 packages); api suite 12 passing incl. 8 new integration tests
+**Decisions:** orgs/members/invitations kept as Graphite-owned tables (Better Auth manages only users/sessions/accounts/verifications) per DATA.md; invite emails use a console transport and the raw link is returned to the inviter (no SMTP in this env)
+**Follow-ups:** none

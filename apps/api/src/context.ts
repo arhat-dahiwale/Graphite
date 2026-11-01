@@ -3,6 +3,7 @@ import type { Database } from "@graphite/db/client";
 import type { Sql } from "postgres";
 import type Redis from "ioredis";
 import type { IncomingHttpHeaders } from "node:http";
+import type { GraphiteAuth } from "./auth.js";
 
 export interface SessionUser {
   id: string;
@@ -14,8 +15,8 @@ export interface AppDeps {
   db: Database;
   sql: Sql;
   redis: Redis;
-  /** Resolve the session user from request headers (auth library hook). */
-  resolveSession: (headers: IncomingHttpHeaders) => Promise<SessionUser | null>;
+  /** Better Auth instance; mounts /api/auth/* and resolves sessions. */
+  auth?: GraphiteAuth;
   /** Resolve membership role for a user within an org (repo-backed). */
   resolveMembershipRole: (
     user: SessionUser,

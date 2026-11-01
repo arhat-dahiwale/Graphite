@@ -9,6 +9,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { isAppError, logger, notFound, withTimeout, type AppError } from "@graphite/core";
 import { createContext, type AppDeps, type SessionUser } from "./context.js";
 import { appRouter } from "./routers/index.js";
+import { invitationsRestRouter } from "./rest/invitations.js";
 
 interface AuthedRequest extends Request {
   graphiteUser?: SessionUser | null;
@@ -68,16 +69,27 @@ export function createApp(deps: AppDeps, opts?: { allowedOrigins?: string[] }): 
     res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "down", checks });
   });
 
-  // Session middleware: resolves the user for downstream routers (auth wiring
-  // is added with the auth phase; resolveSession may simply return null).
+  // Better Auth handles /api/auth/* (sign-up, sign-in, sign-out, session).
+  if (deps.auth) {
+    app.use("/api/auth", (req, res, next) => {
+      void Promise.resolve(deps.auth?.handler(req, res)).catch(next);
+    });
+  }
+
+  // Session middleware: resolves the user for downstream routers.
   app.use(async (req: AuthedRequest, _res: Response, next: NextFunction) => {
     try {
-      req.graphiteUser = await deps.resolveSession(req.headers);
+      req.graphiteUser = deps.auth
+        ? await deps.auth.resolveSession(req.headers)
+        : null;
       next();
     } catch (e) {
       next(e);
     }
   });
+
+  // REST routers (AppError -> API.md JSON via the error handler below).
+  app.use("/api/v1", invitationsRestRouter(deps));
 
   // tRPC mounted at /trpc.
   app.use(

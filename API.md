@@ -173,10 +173,15 @@ Mounted at `/trpc`. All procedures are authenticated unless noted; each enforces
 | Procedure | Type | Role | Description |
 |---|---|---|---|
 | `list` | query | viewer | Members and roles |
-| `invite` | mutation | owner | Email invitation |
-| `updateRole` | mutation | owner | Change role |
-| `remove` | mutation | owner | Remove member |
-| `leave` | mutation | any | Leave org |
+| `listInvitations` | query | viewer | Pending invitations (token hashes never exposed) |
+| `invite` | mutation | owner | Email invitation. Returns `{ invitation, token, inviteUrl }`; email delivery uses the console transport in this environment, so the raw token/link is also returned to the inviter |
+| `revokeInvitation` | mutation | owner | Mark an invitation revoked |
+| `updateRole` | mutation | owner | Change role (last owner cannot be demoted) |
+| `remove` | mutation | owner | Remove member (last owner protected) |
+| `leave` | mutation | any | Leave org (last owner must transfer first) |
+| `acceptInvite` | mutation | session | Accept a pending invitation with the raw token; caller email must match |
+
+OAuth sign-in (Google/GitHub) is active only when the corresponding client id/secret env vars are set; email + password is always available under `/api/auth/*`.
 
 ### `project`
 `list`, `get`, `create`, `update`, `delete` (create/update/delete: editor+).
