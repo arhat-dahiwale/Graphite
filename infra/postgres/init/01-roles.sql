@@ -20,6 +20,8 @@ GRANT CONNECT ON DATABASE graphite TO graphite_readonly;
 GRANT USAGE ON SCHEMA datasets TO graphite_readonly;
 -- statement_timeout enforced at role level; the data service caps it further per query.
 ALTER ROLE graphite_readonly SET statement_timeout = '10s';
+-- Bare table names in user SQL resolve against the datasets schema only.
+ALTER ROLE graphite_readonly SET search_path = datasets;
 
 -- The admin user (graphite) owns migrations; app tables created by it must be
 -- readable/writable by graphite_app. Default privileges above only apply to

@@ -74,7 +74,7 @@ Handled by the auth library under `/api/auth/*` (sign-up, sign-in, sign-out, OAu
 ```json
 {
   "dataset": { "id": "ds_8f2k", "status": "queued", "name": "sales_2025.csv" },
-  "jobId": "ingest:ds_8f2k"
+  "jobId": "ingest-ds_8f2k"
 }
 ```
 

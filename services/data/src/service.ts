@@ -1,11 +1,16 @@
-import { loadPackageDefinition, Server, status } from "@grpc/grpc-js";
-import type { ServerUnaryCall, sendUnaryData, ServiceDefinition } from "@grpc/grpc-js";
+import {
+  loadPackageDefinition,
+  Server,
+  status,
+  type ServerUnaryCall,
+  type sendUnaryData,
+  type ServiceDefinition,
+} from "@grpc/grpc-js";
 import protoLoader from "@grpc/proto-loader";
 import { AppError } from "@graphite/core";
 import { buildServiceImplementation, type DataServiceOptions } from "./handlers.js";
 
 export type { DataServiceOptions };
-
 interface ProtoShape {
   graphite: {
     data: {
@@ -44,16 +49,21 @@ export function createDataService(options: DataServiceOptions): {
   return { server, impl };
 }
 
-type Handler<TReq, TRes> = (
-  call: ServerUnaryCall<TReq, TRes>,
-  callback: sendUnaryData<TRes>,
-) => Promise<void>;
+type Handler<TReq, TRes> = (call: ServerUnaryCall<TReq, TRes>) => Promise<TRes>;
 
 function wrap<TReq, TRes>(fn: Handler<TReq, TRes>) {
-  return (call: ServerUnaryCall<TReq, TRes>, callback: sendUnaryData<TRes>): void => {
-    fn(call, callback).catch((e) => {
-      callback({ code: grpcStatusFor(e), message: e instanceof Error ? e.message : "internal error" });
-    });
+  return (
+    call: ServerUnaryCall<TReq, TRes>,
+    callback: sendUnaryData<TRes>,
+  ): void => {
+    fn(call)
+      .then((res) => callback(null, res))
+      .catch((e: unknown) => {
+        callback({
+          code: grpcStatusFor(e),
+          message: e instanceof Error ? e.message : "internal error",
+        });
+      });
   };
 }
 

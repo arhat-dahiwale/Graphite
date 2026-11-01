@@ -48,19 +48,19 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 2: CSV ingestion
 **Goal:** upload a CSV and query it.
 
-- [ ] Upload endpoint with streaming to MinIO
-- [ ] BullMQ ingestion worker with idempotent job IDs
-- [ ] Column type inference and bulk load into `datasets.ds_<id>`
-- [ ] Ingestion progress events over SSE
-- [ ] Dataset page: progress, preview table, column types, stats
-- [ ] Manual column type override
-- [ ] gRPC data service with `DescribeDataset`, `SampleRows`, `ColumnStats`, `RunQuery`
-- [ ] `graphite_readonly` role, schema separation, statement timeout
-- [ ] SQL AST check (single SELECT only), row limit, table allowlist
+- [x] Upload endpoint with streaming to MinIO
+- [x] BullMQ ingestion worker with idempotent job IDs
+- [x] Column type inference and bulk load into `datasets.ds_<id>`
+- [x] Ingestion progress events over SSE
+- [x] Dataset page: progress, preview table, column types, stats
+- [x] Manual column type override
+- [x] gRPC data service with `DescribeDataset`, `SampleRows`, `ColumnStats`, `RunQuery`
+- [x] `graphite_readonly` role, schema separation, statement timeout
+- [x] SQL AST check (single SELECT only), row limit, table allowlist
 
 **Exit criteria**
-- [ ] A 10 MB CSV is uploaded and previewed in under 30 seconds
-- [ ] Tests confirm unsafe SQL is rejected (writes, multiple statements, other schemas)
+- [x] A 10 MB CSV is uploaded and previewed in under 30 seconds
+- [x] Tests confirm unsafe SQL is rejected (writes, multiple statements, other schemas)
 
 ---
 
@@ -228,7 +228,7 @@ Tick a phase only when every box inside it is checked.
 
 - [x] Phase 0: Foundation
 - [x] Phase 1: Auth, orgs, projects
-- [ ] Phase 2: CSV ingestion
+- [x] Phase 2: CSV ingestion
 - [ ] Phase 3: Manual dashboard
 - [ ] Phase 4: Agent
 - [ ] Phase 5: MCP (internal)

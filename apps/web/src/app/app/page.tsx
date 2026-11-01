@@ -63,12 +63,12 @@ export default function ProjectsPage() {
       <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
         {(projectsQuery.data ?? []).map((p) => (
           <li key={p.id} className="flex items-center justify-between px-4 py-3">
-            <div>
-              <p className="font-medium">{p.name}</p>
-              {p.description && (
-                <p className="text-sm text-zinc-500">{p.description}</p>
-              )}
-            </div>
+            <Link
+              href={`/app/projects/${p.id}`}
+              className="font-medium underline-offset-2 hover:underline"
+            >
+              {p.name}
+            </Link>
             <div className="flex items-center gap-3 text-sm">
               <span className="text-zinc-600">
                 {new Date(p.createdAt).toLocaleDateString()}

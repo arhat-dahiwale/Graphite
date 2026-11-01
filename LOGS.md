@@ -64,3 +64,20 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** pnpm lint/typecheck/test all green (6 packages); api suite 12 passing incl. 8 new integration tests
 **Decisions:** orgs/members/invitations kept as Graphite-owned tables (Better Auth manages only users/sessions/accounts/verifications) per DATA.md; invite emails use a console transport and the raw link is returned to the inviter (no SMTP in this env)
 **Follow-ups:** none
+### 2026-11-01 07:20 | GLM-5.3-Flash (overnight run) | Phase 2
+**Task:** CSV ingestion end to end (upload, ingest, query, UI)
+**Summary:**
+- packages/storage: S3/MinIO client helpers (multipart streaming upload, object streams, bucket ensure)
+- Upload: POST /api/v1/projects/:projectId/datasets (multer temp file -> S3 multipart) -> dataset row -> BullMQ `ingestion` job with deterministic id `ingest-<datasetId>` (BullMQ 6 forbids ":" in custom ids; API.md updated)
+- Worker: streaming papaparse, 1000-row type-inference sample, batched inserts with unique per-cell $n::type casts (NULL typing + pipelining via postgres-js; 10 MB/~290k rows load in ~6 s, end-to-end ~11 s)
+- Idempotency: re-runs drop/recreate the table; identical job ids are deduplicated by BullMQ (verified in tests, including no row duplication on retry)
+- gRPC data service: DescribeDataset/SampleRows/ColumnStats/RunQuery; metadata via app-role pool, ALL user SQL via graphite_readonly pool inside a transaction with SET LOCAL statement_timeout, outer row cap + truncation flag; tenant check hides other orgs' datasets (NOT_FOUND)
+- SQL safety: node-sql-parser AST gate (single SELECT, no CTEs, table allowlist incl. schema rejection); readonly role has search_path=datasets and role-level statement_timeout
+- SSE: /api/v1/datasets/:id/events and /runs/:id/events relay Redis pub/sub to browsers (multi-instance safe)
+- UI: project page with CSV upload + dataset list; dataset page with live progress bar (SSE), preview table, column stats, per-column type override (physical ALTER TABLE cast, failures surface as 422)
+- Fixes found by tests: repeated $n placeholders with unused params caused 42P18; proto-loader camelCase field names; Date param serialization (dates now ISO strings with explicit casts)
+**Files changed:** packages/{storage,core}, apps/api (rest/{datasets,datasets-query,events,auth}, routers/dataset), apps/worker (ingestion/*, queues/*), services/data (handlers, sqlcheck, client), apps/web (project/dataset pages)
+**Docs updated:** DATA.md (dataset events channel), API.md (job id format), ARCHITECTURE.md none needed
+**Tests:** 25 api tests incl. 13 new integration (upload/SSE/idempotency/override/8 gRPC safety), 9 sqlcheck unit tests, core dataset-type tests; full lint/typecheck/test green; 10 MB criterion verified at ~11 s
+**Decisions:** CTEs rejected in run_sql v1 (conservative; chart compiler emits flat SELECTs); preview flows through the data service so read-only rules apply everywhere
+**Follow-ups:** none

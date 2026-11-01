@@ -2,6 +2,8 @@ import { childLogger } from "@graphite/core";
 import { loadRootEnv } from "@graphite/core/config";
 import { createDb } from "@graphite/db/client";
 import { getMembership } from "@graphite/db/repo/members";
+import { Queue } from "bullmq";
+import { createStorage, ensureBucket } from "@graphite/storage";
 import { createApp } from "./app.js";
 import { createAuth } from "./auth.js";
 import { env } from "./env.js";
@@ -30,6 +32,20 @@ async function main(): Promise<void> {
         : undefined,
   });
 
+  const storage = createStorage({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    accessKeyId: env.S3_ACCESS_KEY_ID,
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    bucket: env.S3_BUCKET,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+  });
+  await ensureBucket(storage, env.S3_BUCKET);
+
+  const ingestionQueue = new Queue("ingestion", {
+    connection: redis,
+  });
+
   const { app } = createApp(
     {
       db,
@@ -38,7 +54,18 @@ async function main(): Promise<void> {
       auth,
       resolveMembershipRole: async (user, orgId) => getMembership(db, orgId, user.id),
     },
-    { allowedOrigins: [env.WEB_URL, "http://localhost:3000", "http://127.0.0.1:3000"] },
+    {
+      allowedOrigins: [env.WEB_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
+      rest: {
+        storage,
+        bucket: env.S3_BUCKET,
+        ingestionQueue,
+        maxUploadMb: env.MAX_UPLOAD_MB,
+        dataGrpcAddress: `${env.DATA_GRPC_HOST}:${env.DATA_GRPC_PORT}`,
+        maxQueryRows: env.MAX_QUERY_ROWS,
+        statementTimeoutMs: env.STATEMENT_TIMEOUT_MS,
+      },
+    },
   );
 
   const server = app.listen(env.API_PORT, () => {

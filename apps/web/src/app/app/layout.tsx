@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Shell } from "@/components/shell";
-import { OrgProvider, useOrg } from "@/components/org-context";
+import { useOrg } from "@/components/org-context";
 import { TrpcProvider } from "@/lib/providers";
 import { trpc } from "@/lib/trpc";
 

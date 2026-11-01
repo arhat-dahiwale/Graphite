@@ -26,6 +26,8 @@ export async function setupDatabase(adminUrl: string, databaseName: string): Pro
         $$;
       `);
       await sql.unsafe(`ALTER ROLE graphite_readonly SET statement_timeout = '10s'`);
+      // Bare table names in user SQL resolve against the datasets schema only.
+      await sql.unsafe(`ALTER ROLE graphite_readonly SET search_path = datasets`);
       await sql.unsafe(`ALTER ROLE graphite_app SET statement_timeout = '30s'`);
     } finally {
       await sql.end();

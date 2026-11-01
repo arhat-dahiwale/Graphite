@@ -3,25 +3,41 @@ import { createDb } from "@graphite/db/client";
 import type Redis from "ioredis";
 import RedisClient from "ioredis";
 import type { Sql } from "postgres";
+import { Queue } from "bullmq";
+import { createStorage, ensureBucket } from "@graphite/storage";
+import { createDataService } from "../../../services/data/src/service.js";
+import { ServerCredentials } from "@grpc/grpc-js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { startIngestionWorker } from "../../../apps/worker/src/queues/ingestion.js";
+import type { Worker as BullWorker } from "bullmq";
 import { createApp } from "../src/app.js";
 import { createAuth } from "../src/auth.js";
 import type { AppDeps } from "../src/context.js";
 import { getMembership } from "@graphite/db/repo/members";
 
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const PROTO_PATH = path.join(dir, "..", "..", "..", "services", "data", "proto", "data.proto");
+
 /**
  * Shared integration-test harness: a real app instance against the
- * graphite_test database and a throwaway Redis DB, listening on an ephemeral
- * port. Tests exercise the full HTTP + cookie path.
+ * graphite_test database, a throwaway Redis DB, real MinIO, an in-process
+ * gRPC data service, and a live ingestion worker. Tests exercise the full
+ * HTTP + cookie path.
  */
 
 export const TEST_DB_NAME = "graphite_test";
 export const TEST_REDIS_DB = 9; // isolated logical DB for tests
+export const TEST_BUCKET = "graphite-test-uploads";
 
 export interface TestApp {
   baseUrl: string;
   db: Database;
   sql: Sql;
+  /** App-role pool on the test DB (same as `sql`). */
   redis: Redis;
+  ingestionQueue: Queue;
+  dataPort: number;
   authSecret: string;
   close: () => Promise<void>;
 }
@@ -31,6 +47,7 @@ export async function startTestApp(): Promise<TestApp> {
   const adminUrl = requireEnv("DATABASE_ADMIN_URL");
   const u = new URL(adminUrl);
   u.pathname = `/${TEST_DB_NAME}`;
+  const testAdminUrl = u.toString();
 
   u.username = "graphite_app";
   u.password = "app_password";
@@ -41,6 +58,7 @@ export async function startTestApp(): Promise<TestApp> {
     maxRetriesPerRequest: null,
   });
   redis.select(TEST_REDIS_DB);
+  await redis.flushdb();
 
   // Clean state: truncate every table in the test database.
   await truncateAll(sql);
@@ -53,6 +71,48 @@ export async function startTestApp(): Promise<TestApp> {
     webUrl: "http://localhost:3000",
   });
 
+  // Object storage (real MinIO).
+  const storage = createStorage({
+    endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9002",
+    region: "us-east-1",
+    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "minioadmin",
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "minioadmin",
+    bucket: TEST_BUCKET,
+    forcePathStyle: true,
+  });
+  await ensureBucket(storage, TEST_BUCKET);
+
+  // Read-only pool for the data service (same user-visible SQL path as prod).
+  const roUrl = new URL(testAdminUrl);
+  roUrl.username = "graphite_readonly";
+  roUrl.password = "readonly_password";
+  const readonlyDb = createDb(roUrl.toString(), { max: 5 });
+
+  // In-process gRPC data service on an ephemeral port.
+  const { server: grpcServer } = createDataService({
+    metadataSql: sql,
+    readonlySql: readonlyDb.sql,
+    protoPath: PROTO_PATH,
+    maxQueryRows: 1000,
+    statementTimeoutMs: 2000,
+  });
+  const dataPort = await new Promise<number>((resolve, reject) => {
+    grpcServer.bindAsync("127.0.0.1:0", ServerCredentials.createInsecure(), (err, port) => {
+      if (err) reject(err);
+      else resolve(port);
+    });
+  });
+
+  const ingestionQueue = new Queue("ingestion", { connection: redis });
+  const worker: BullWorker = startIngestionWorker({
+    connection: redis,
+    db,
+    sql,
+    storage,
+    bucket: TEST_BUCKET,
+    concurrency: 2,
+  });
+
   const deps: AppDeps = {
     db,
     sql,
@@ -63,6 +123,15 @@ export async function startTestApp(): Promise<TestApp> {
 
   const { app } = createApp(deps, {
     allowedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    rest: {
+      storage,
+      bucket: TEST_BUCKET,
+      ingestionQueue,
+      maxUploadMb: 50,
+      dataGrpcAddress: `127.0.0.1:${dataPort}`,
+      maxQueryRows: 1000,
+      statementTimeoutMs: 2000,
+    },
   });
   const server = app.listen(0);
   await new Promise<void>((resolve) => server.once("listening", resolve));
@@ -75,9 +144,15 @@ export async function startTestApp(): Promise<TestApp> {
     db,
     sql,
     redis,
+    ingestionQueue,
+    dataPort,
     authSecret,
     close: async () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      await worker.close();
+      await ingestionQueue.close();
+      grpcServer.tryShutdown(() => undefined);
+      readonlyDb.sql.end();
       redis.disconnect();
       await sql.end();
     },
@@ -108,6 +183,13 @@ export async function truncateAll(sql: Sql): Promise<void> {
   const names = tables.map((r) => `"${r.tablename}"`).join(", ");
   if (names.length > 0) {
     await sql.unsafe(`TRUNCATE TABLE ${names} CASCADE`);
+  }
+  // Drop any leftover dataset tables from previous runs.
+  const dsTables = await sql`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'datasets'
+  `;
+  for (const t of dsTables) {
+    await sql.unsafe(`DROP TABLE IF EXISTS datasets."${t.tablename}" CASCADE`);
   }
 }
 
@@ -185,7 +267,7 @@ export async function trpc<T>(
   return body.result.data;
 }
 
-/** Call a REST endpoint with a session cookie. */
+/** Call a REST endpoint with a session cookie (JSON body). */
 export async function rest(
   baseUrl: string,
   cookie: string,
@@ -200,4 +282,104 @@ export async function rest(
   });
   const json = await res.json().catch(() => null);
   return { status: res.status, json };
+}
+
+/** Upload a CSV via the real multipart endpoint. */
+export async function uploadCsv(
+  baseUrl: string,
+  cookie: string,
+  projectId: string,
+  filename: string,
+  csv: string,
+): Promise<{ status: number; json: { dataset?: { id: string; status: string }; jobId?: string } }> {
+  const form = new FormData();
+  form.append("file", new Blob([csv], { type: "text/csv" }), filename);
+  const res = await fetch(`${baseUrl}/api/v1/projects/${projectId}/datasets`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  const json = (await res.json().catch(() => ({}))) as { dataset?: { id: string; status: string }; jobId?: string };
+  return { status: res.status, json };
+}
+
+/**
+ * Collect SSE events from an endpoint until one of `until` event names fires
+ * (or timeout). Returns the parsed events with their names.
+ */
+export async function collectSse(
+  baseUrl: string,
+  cookie: string,
+  path: string,
+  until: string[],
+  timeoutMs = 30_000,
+): Promise<Array<{ event: string; data: unknown }>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const events: Array<{ event: string; data: unknown }> = [];
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { cookie, accept: "text/event-stream" },
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`SSE connect failed: ${res.status}`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let currentEvent = "message";
+    const done = new Promise<void>((resolve) => {
+      void (async () => {
+        for (;;) {
+          const { value, done: finished } = await reader.read();
+          if (finished) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buffer.indexOf("\n\n")) >= 0) {
+            const block = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            let eventName = "message";
+            let data = "";
+            for (const line of block.split("\n")) {
+              if (line.startsWith("event:")) eventName = line.slice(6).trim();
+              else if (line.startsWith("data:")) data += line.slice(5).trim();
+            }
+            if (eventName === "ping") continue;
+            let parsed: unknown = data;
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              // keep raw
+            }
+            events.push({ event: eventName, data: parsed });
+            currentEvent = eventName;
+          }
+          if (until.includes(currentEvent)) break;
+        }
+        resolve();
+      })();
+    });
+    await done;
+  } catch {
+    // aborted on timeout — return what we collected
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+  return events;
+}
+
+/** Poll a JSON REST endpoint until a predicate passes. */
+export async function pollUntil<T>(
+  fn: () => Promise<T>,
+  predicate: (v: T) => boolean,
+  timeoutMs = 30_000,
+  intervalMs = 250,
+): Promise<T> {
+  const start = Date.now();
+  for (;;) {
+    const v = await fn();
+    if (predicate(v)) return v;
+    if (Date.now() - start > timeoutMs) throw new Error("pollUntil timed out");
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
 }

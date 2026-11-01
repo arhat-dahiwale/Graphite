@@ -4,6 +4,8 @@ export * from "./logger.js";
 export * from "./errors.js";
 export * from "./authz.js";
 export * from "./events.js";
+export * from "./csv.js";
+export * from "./dataset-types.js";
 
 /** Reject after `ms` even if the promise never settles. */
 export function withTimeout<T>(promise: Promise<T>, ms: number, message = "timeout"): Promise<T> {

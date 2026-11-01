@@ -93,3 +93,16 @@ export async function softDeleteProject(
     .returning({ id: projects.id });
   return rows.length > 0;
 }
+
+/**
+ * Internal lookup by id without an org filter. Callers must run the result
+ * through requireAuthorized with the project's organizationId before acting.
+ */
+export async function getProjectById(db: DbLike, projectId: string): Promise<Project | null> {
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  return rows[0] ?? null;
+}

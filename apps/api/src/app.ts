@@ -10,6 +10,11 @@ import { isAppError, logger, notFound, withTimeout, type AppError } from "@graph
 import { createContext, type AppDeps, type SessionUser } from "./context.js";
 import { appRouter } from "./routers/index.js";
 import { invitationsRestRouter } from "./rest/invitations.js";
+import { datasetsRestRouter } from "./rest/datasets.js";
+import { datasetRestRouter } from "./rest/datasets-query.js";
+import { eventsRestRouter } from "./rest/events.js";
+import type { S3Client } from "@aws-sdk/client-s3";
+import type { Queue } from "bullmq";
 
 interface AuthedRequest extends Request {
   graphiteUser?: SessionUser | null;
@@ -20,11 +25,24 @@ export interface CreatedApp {
   deps: AppDeps;
 }
 
+export interface RestExtras {
+  storage: S3Client;
+  bucket: string;
+  ingestionQueue: Queue;
+  maxUploadMb: number;
+  dataGrpcAddress: string;
+  maxQueryRows: number;
+  statementTimeoutMs: number;
+}
+
 /**
  * Build the API app. All service handles are injected so tests can run the
  * app against isolated databases and Redis instances.
  */
-export function createApp(deps: AppDeps, opts?: { allowedOrigins?: string[] }): CreatedApp {
+export function createApp(
+  deps: AppDeps,
+  opts?: { allowedOrigins?: string[]; rest?: RestExtras },
+): CreatedApp {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", true);
@@ -90,6 +108,31 @@ export function createApp(deps: AppDeps, opts?: { allowedOrigins?: string[] }): 
 
   // REST routers (AppError -> API.md JSON via the error handler below).
   app.use("/api/v1", invitationsRestRouter(deps));
+  app.use("/api/v1", eventsRestRouter(deps));
+  if (opts?.rest) {
+    app.use(
+      "/api/v1",
+      datasetsRestRouter({
+        db: deps.db,
+        sql: deps.sql,
+        auth: deps.auth,
+        storage: opts.rest.storage,
+        bucket: opts.rest.bucket,
+        ingestionQueue: opts.rest.ingestionQueue,
+        maxUploadMb: opts.rest.maxUploadMb,
+      }),
+    );
+    app.use(
+      "/api/v1",
+      datasetRestRouter({
+        db: deps.db,
+        auth: deps.auth,
+        dataGrpcAddress: opts.rest.dataGrpcAddress,
+        maxQueryRows: opts.rest.maxQueryRows,
+        statementTimeoutMs: opts.rest.statementTimeoutMs,
+      }),
+    );
+  }
 
   // tRPC mounted at /trpc.
   app.use(
