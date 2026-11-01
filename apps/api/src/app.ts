@@ -17,6 +17,7 @@ import { datasetsRestRouter } from "./rest/datasets";
 import { datasetRestRouter } from "./rest/datasets-query";
 import { eventsRestRouter } from "./rest/events";
 import { publicRestRouter } from "./rest/public";
+import { oauthRestRouter } from "./rest/oauth";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { Queue } from "bullmq";
 import { createMcpRouter, type McpRouterDeps } from "@graphite/mcp-server/server";
@@ -191,6 +192,8 @@ export function createApp(
   app.use("/api/v1", eventsRestRouter(deps));
   app.use("/api/v1", integrationsRestRouter(deps));
   app.use("/api/v1", publicRestRouter(deps));
+  // OAuth 2.1 + well-known discovery mount at the API root (API.md §OAuth).
+  app.use(oauthRestRouter(deps));
   if (opts?.rest) {
     app.use(
       "/api/v1",

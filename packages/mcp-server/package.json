@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./tools": "./src/tools/index.ts",
     "./context": "./src/context.ts",
-    "./server": "./src/server.ts",
     "./internal-auth": "./src/internal-auth.ts",
+    "./oauth": "./src/oauth.ts",
+    "./scopes": "./src/scopes.ts",
+    "./server": "./src/server.ts",
     "./tokens": "./src/tokens.ts",
-    "./scopes": "./src/scopes.ts"
+    "./tools": "./src/tools/index.ts"
   },
   "scripts": {
     "lint": "eslint .",

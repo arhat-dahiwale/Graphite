@@ -38,6 +38,7 @@ import {
   resolveMcpToken,
   trackMcpClient,
 } from "./tokens.js";
+import { resolveOAuthAccessToken } from "./oauth.js";
 import { ALL_SCOPES, TOOL_SCOPES, hasScope, type McpScope } from "./scopes.js";
 
 const log = childLogger({ component: "mcp-server" });
@@ -80,6 +81,21 @@ async function resolveIdentity(deps: McpRouterDeps, req: Request): Promise<Resol
       actor,
       scopes: t.scopes,
       tokenId: t.id,
+      requestId: `mcp_${crypto.randomUUID()}`,
+    };
+  }
+  if (auth?.startsWith("Bearer gphat_")) {
+    // OAuth 2.1 access token (Phase 10): same ToolContext, scopes, and org
+    // binding as the PAT path.
+    const oauth = await resolveOAuthAccessToken(deps.db, auth.slice("Bearer ".length));
+    if (!oauth) {
+      throw Object.assign(new Error("Invalid, expired, or revoked access token"), { status: 401 });
+    }
+    const actor = await actorForUser(deps.db, oauth.userId, oauth.organizationId);
+    return {
+      actor,
+      scopes: oauth.scope.split(" ") as McpScope[],
+      tokenId: undefined,
       requestId: `mcp_${crypto.randomUUID()}`,
     };
   }

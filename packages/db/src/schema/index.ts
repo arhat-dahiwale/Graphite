@@ -510,7 +510,79 @@ export const mcpClients = pgTable("mcp_clients", {
   clientName: text("client_name").notNull(),
   clientVersion: text("client_version"),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// OAuth 2.1 for MCP (Phase 10): minimal authorization server.
+// Data model per DATA.md §6. Tokens are opaque and stored hashed.
+// ---------------------------------------------------------------------------
+
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => newId("ocl")),
+  clientId: text("client_id").notNull().unique(),
+  /** SHA-256 of the client secret; absent for public (PKCE-only) clients. */
+  clientSecretHash: text("client_secret_hash"),
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris").array().notNull(),
+  grantTypes: text("grant_types").array().notNull().default(["authorization_code", "refresh_token"]),
+  /** Dynamic registration: the registering user binds the client to their org. */
+  registeredBy: text("registered_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const oauthCodes = pgTable("oauth_codes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => newId("ocd")),
+  codeHash: text("code_hash").notNull().unique(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  redirectUri: text("redirect_uri").notNull(),
+  scope: text("scope").notNull(),
+  /** S256(code_verifier) captured at authorize time. */
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const oauthTokens = pgTable("oauth_tokens", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => newId("otk")),
+  /** SHA-256 of the opaque token; plaintext never stored. */
+  tokenHash: text("token_hash").notNull().unique(),
+  kind: text("kind").notNull().default("access"), // access | refresh
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  scope: text("scope").notNull(),
+  /** Refresh family id: rotating a refresh token revokes the whole family. */
+  familyId: text("family_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
