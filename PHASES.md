@@ -67,20 +67,20 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 3: Chart spec and manual dashboard
 **Goal:** a full dashboard experience with no AI.
 
-- [ ] `packages/chart-spec` Zod schemas
-- [ ] `specToEChartsOption` adapter
-- [ ] Structured query compiler (spec query to safe SQL)
-- [ ] Manual chart builder UI
-- [ ] Dashboards, charts, and chart versions in the database
-- [ ] Chart version history and revert
-- [ ] Canvas with drag, resize, and swap
-- [ ] Framer Motion layout transitions
-- [ ] Layout persistence with `layout_version`
+- [x] `packages/chart-spec` Zod schemas
+- [x] `specToEChartsOption` adapter
+- [x] Structured query compiler (spec query to safe SQL)
+- [x] Manual chart builder UI
+- [x] Dashboards, charts, and chart versions in the database
+- [x] Chart version history and revert
+- [x] Canvas with drag, resize, and swap
+- [x] Framer Motion layout transitions
+- [x] Layout persistence with `layout_version`
 
 **Exit criteria**
-- [ ] A user can build, arrange, and edit a multi-chart dashboard manually
-- [ ] Reverting a chart creates a new version and renders correctly
-- [ ] The product is demoable without any AI features
+- [x] A user can build, arrange, and edit a multi-chart dashboard manually
+- [x] Reverting a chart creates a new version and renders correctly
+- [x] The product is demoable without any AI features
 
 ---
 
@@ -229,7 +229,7 @@ Tick a phase only when every box inside it is checked.
 - [x] Phase 0: Foundation
 - [x] Phase 1: Auth, orgs, projects
 - [x] Phase 2: CSV ingestion
-- [ ] Phase 3: Manual dashboard
+- [x] Phase 3: Manual dashboard
 - [ ] Phase 4: Agent
 - [ ] Phase 5: MCP (internal)
 - [ ] Phase 6: Collaboration
