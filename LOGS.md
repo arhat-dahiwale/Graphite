@@ -232,3 +232,28 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** full suite 141 green on final code; e2e 4/4; lint + typecheck clean; fresh-clone suite green
 **Decisions:** hand-rolled OAuth 2.1 AS (no provider plugin available); migration 0003 corrects 0002 rather than editing an applied migration; kind cluster deleted after verification (recreatable via README)
 **Follow-ups:** demo video, stretch items (Yjs/DuckDB/refresh) intentionally deferred per run instructions
+
+### 2026-11-02 05:40 | GLM-5.3-Flash (overnight run) | Final
+**Task:** Final report — Phases 7-10 complete
+**Summary:**
+- All four phases (7, 8, 9, 10) completed and tagged on branch overnight/phases-7-10 (commits 5ae949b..3e8fc04); tags fixes-done, phase-7-done .. phase-10-done; NOTHING pushed to any remote (no remote configured); main untouched
+- Total elapsed: 00:16 - 05:40 (~5h20m). Final state: lint clean, typecheck clean, 141 vitest tests green, 4 Playwright e2e green (incl. axe accessibility), fresh-clone walkthrough green end to end
+**Last phase completed:** Phase 10 (polish and extras)
+**Deferred / unverified items (all present as unchecked lines in PHASES.md):**
+- Phase 4/5: two live-LLM criteria (mock-model only; needs a human with an API key)
+- Phase 7: real Claude Desktop verification + demo GIF (scripted MCP client used instead)
+- Phase 9: automatic queue-depth scaling with KEDA (ScaledObjects defined+validated; operator install blocked by network); HPA CPU targets need metrics-server; CI e2e/push jobs defined but not executed here
+- Phase 10: demo video (human); stretch items Yjs/DuckDB/scheduled refresh intentionally not built (out of scope per run instructions)
+- Loki log aggregation and alerting rules not set up (dashboards only); OAuth sign-in (Google/GitHub) wired but unverified (no provider keys)
+**How to run locally with the mock model:**
+1. pnpm install && cp .env.example .env && docker compose up -d (Postgres :5433, Redis :6380, MinIO :9002)
+2. pnpm db:setup && pnpm db:migrate
+3. pnpm dev -> http://localhost:3000 (LLM_PROVIDER=mock default; runs labeled mock-scripted, costs simulated)
+4. Observability: docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d, keep OTEL_ENABLED=true, restart pnpm dev -> Grafana :3001, Tempo :3218, Prometheus :9132; every agent run's trace id lands in agent_runs.trace_id
+5. External MCP: Integrations page -> create token (or POST /oauth/register + PKCE) -> point the client at http://localhost:4000/mcp
+6. pnpm lint && pnpm typecheck && pnpm test; pnpm test:e2e (Playwright, needs the dev stack)
+**Top 3 things for the human to review first:**
+1. packages/mcp-server (server.ts, tokens.ts, scopes.ts, oauth.ts) + the two mounts — the external security surface: PAT hashing/scopes/rate limits and the hand-rolled OAuth 2.1 AS (a human security review is warranted for any hand-rolled AS)
+2. services/data/src/{sqlcheck,handlers,service,client}.ts — the SQL safety boundary incl. the new trace-metadata path; and apps/api/src/routers/chart.ts dashboard-filter merge (re-validation before compile)
+3. The hand-rolled OAuth 2.1 flow end to end with a real MCP client (Claude Desktop/Cursor) plus the live-LLM agent runs — the two things automation could not fully verify here
+**Follow-ups:** none — run complete
