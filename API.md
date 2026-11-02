@@ -51,9 +51,11 @@ Interfaces: REST, tRPC, Server-Sent Events, WebSocket, gRPC, and MCP. Keep this 
 ### Health and ops
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/healthz` | none | Liveness |
+| GET | `/healthz` | none | Liveness (api :4000, worker :4001, data service :50052) |
 | GET | `/readyz` | none | Readiness (Postgres, Redis) |
 | GET | `/metrics` | internal | Prometheus metrics |
+
+Each long-running process exposes the same `/healthz` + `/readyz` pair: api on `API_PORT` (4000), the worker on `WORKER_HEALTH_PORT` (4001), and the data service on `DATA_HEALTH_PORT` (50052) next to its gRPC listener on `DATA_GRPC_PORT` (50051).
 
 ### Auth
 Handled by the auth library under `/api/auth/*` (sign-up, sign-in, sign-out, OAuth callbacks, session, organization endpoints if the library provides them).
@@ -72,7 +74,7 @@ Handled by the auth library under `/api/auth/*` (sign-up, sign-in, sign-out, OAu
 ```json
 {
   "dataset": { "id": "ds_8f2k", "status": "queued", "name": "sales_2025.csv" },
-  "jobId": "ingest:ds_8f2k"
+  "jobId": "ingest-ds_8f2k"
 }
 ```
 
@@ -171,10 +173,15 @@ Mounted at `/trpc`. All procedures are authenticated unless noted; each enforces
 | Procedure | Type | Role | Description |
 |---|---|---|---|
 | `list` | query | viewer | Members and roles |
-| `invite` | mutation | owner | Email invitation |
-| `updateRole` | mutation | owner | Change role |
-| `remove` | mutation | owner | Remove member |
-| `leave` | mutation | any | Leave org |
+| `listInvitations` | query | viewer | Pending invitations (token hashes never exposed) |
+| `invite` | mutation | owner | Email invitation. Returns `{ invitation, token, inviteUrl }`; email delivery uses the console transport in this environment, so the raw token/link is also returned to the inviter |
+| `revokeInvitation` | mutation | owner | Mark an invitation revoked |
+| `updateRole` | mutation | owner | Change role (last owner cannot be demoted) |
+| `remove` | mutation | owner | Remove member (last owner protected) |
+| `leave` | mutation | any | Leave org (last owner must transfer first) |
+| `acceptInvite` | mutation | session | Accept a pending invitation with the raw token; caller email must match |
+
+OAuth sign-in (Google/GitHub) is active only when the corresponding client id/secret env vars are set; email + password is always available under `/api/auth/*`.
 
 ### `project`
 `list`, `get`, `create`, `update`, `delete` (create/update/delete: editor+).
@@ -211,10 +218,13 @@ Mounted at `/trpc`. All procedures are authenticated unless noted; each enforces
 ### `run` (agent)
 | Procedure | Type | Role | Description |
 |---|---|---|---|
-| `start` | mutation | editor | Input: `{ dashboardId, datasetId?, kind, prompt, targetChartId? }`. Returns `{ runId }` |
-| `get` | query | viewer | Run detail with steps |
-| `list` | query | viewer | Runs for a dashboard or org |
-| `conversation` | query | viewer | Messages for a dashboard |
+| `start` | mutation | editor | Input: `{ dashboardId, datasetId?, kind, prompt, targetChartId? }`. Creates the conversation (one per dashboard+user), persists the user message, enqueues the `agent-run` job, returns `{ runId, conversationId }` |
+| `get` | query | viewer | `{ run, steps[] }` for a run |
+| `list` | query | viewer | Runs for a dashboard (latest 50) |
+| `cancel` | mutation | editor | Sets `cancel_requested`; the orchestrator stops between steps |
+| `conversation` | query | viewer | `{ conversationId, messages[] }` for the dashboard+caller |
+
+Agent runs execute in the `agent-run` BullMQ queue with a concurrency limit. The model is selected by `LLM_PROVIDER` (`mock-scripted` by default; `anthropic` when a key is configured). Run events stream over `GET /api/v1/runs/:runId/events` (SSE) fed by Redis pub/sub. Every run is labeled with its model in `agent_runs.model` — `mock-scripted` runs are deterministic test scripts, not real model output.
 
 ### `integration`
 `listTokens`, `createToken`, `revokeToken`, `listClients` (wrappers matching the REST endpoints for the UI).
@@ -250,7 +260,7 @@ Namespace: `/collab`. Authentication via session cookie or token at connection. 
 | `chart:added` / `chart:removed` | `{ chartId }` | Dashboard membership changes |
 | `run:status` | `{ runId, status }` | Agent run lifecycle |
 
-Rules: payloads are Zod-validated; unauthorized joins are rejected; viewers may join but their `layout:save` is denied.
+Rules: payloads are Zod-validated; unauthorized joins are rejected; viewers may join but their `layout:save` is denied. The server relays `dash:{id}:events` from Redis (published by MCP tools, agent runs, and tRPC) to room sockets, so chart version events reach every instance. Multi-instance deployments share rooms through the Socket.IO Redis adapter. The web client connects to the API origin (Next dev rewrites cannot proxy WebSockets).
 
 ---
 
@@ -314,7 +324,8 @@ Errors map to gRPC status codes: `INVALID_ARGUMENT` (rejected SQL), `DEADLINE_EX
 - Endpoint: `POST|GET|DELETE /mcp` (Streamable HTTP)
 - Auth: `Authorization: Bearer gph_live_...` (OAuth 2.1 in Phase 10)
 - Identity: every call runs as the token's user within the token's organization and scopes
-- Internal agent uses the same tools through the AI SDK MCP client
+- Internal agent: the orchestrator connects to the internal MCP server (mounted in the worker on WORKER_INTERNAL_MCP_PORT) through the @ai-sdk/mcp client; identity (user, org, run, dashboard) travels in HMAC-signed `x-graphite-internal-context`/`-signature` headers so every tool call executes with the run's identity
+- External token auth (gph_live_...) is already accepted by the same endpoint; the Integrations UI arrives in Phase 7
 
 ### Tools
 
@@ -327,7 +338,7 @@ Errors map to gRPC status codes: `INVALID_ARGUMENT` (rejected SQL), `DEADLINE_EX
 | `run_sql` | `datasets:read` | Read-only SELECT with limits | `datasetId`, `sql`, `limit` (max 1000) |
 | `list_dashboards` | `charts:read` | Dashboards in a project | `projectId` |
 | `list_charts` | `charts:read` | Charts on a dashboard with current specs | `dashboardId` |
-| `create_chart_spec` | `charts:write` | Validate and store a new chart | `datasetId`, `spec`, `dashboardId?` |
+| `create_chart_spec` | `charts:write` | Validate and store a new chart | `spec`, `dashboardId?` (defaults to the run's dashboard for agent callers) |
 | `update_chart_spec` | `charts:write` | New version for an existing chart | `chartId`, `spec`, `reason?` |
 | `add_chart_to_dashboard` | `charts:write` | Place a chart on a dashboard | `dashboardId`, `chartId`, `position?` |
 

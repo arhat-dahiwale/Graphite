@@ -57,7 +57,7 @@ flowchart LR
 
 ### 3.1 apps/web (Next.js)
 - App Router; server components for shells and public shared dashboards; client components for the editor.
-- **Canvas**: react-grid-layout or dnd-kit for positions and sizes; Framer Motion `layout` animations for swaps and reflow.
+- **Canvas**: react-grid-layout v2 (hook-based container width, `dragConfig`/`resizeConfig`) for positions and sizes; Framer Motion `layout` animations for swaps and reflow.
 - **Charts**: ECharts renders a `ChartSpec` through a single `specToEChartsOption()` adapter.
 - **State**: TanStack Query for server state (via tRPC), Zustand for editor-local state (selection, layout draft, presence).
 - **Agent panel**: `useChat` and SSE show streamed text, tool-call steps, and cancel controls.
@@ -67,7 +67,7 @@ flowchart LR
 - **tRPC**: all browser-facing typed calls (CRUD, queries, mutations).
 - **REST**: file upload, SSE streams, public share endpoints, MCP HTTP endpoint, OAuth endpoints, health and metrics.
 - **Socket.IO** with the Redis adapter, so users on different instances share rooms.
-- **Orchestrator**: builds prompts, runs the AI SDK tool loop, writes steps to Postgres, publishes run events to Redis.
+- **Orchestrator**: builds prompts, runs the AI SDK tool loop, writes steps to Postgres, publishes run events to Redis. All agent tools come from the MCP server via the @ai-sdk/mcp client; the worker mounts an internal-only MCP endpoint and signs the run identity into every call.
 - **Auth middleware**: resolves session or token into `{ userId, orgId, role }` for every request.
 
 ### 3.3 apps/worker (BullMQ)
@@ -81,10 +81,11 @@ All jobs are idempotent (keyed by dataset ID or run ID) and use exponential back
 
 ### 3.4 services/data (gRPC)
 Owns all execution of user-visible SQL.
-- Connects as `graphite_readonly`, which has SELECT only on the `datasets` schema.
+- Opens two pools: a metadata pool as `graphite_app` (resolves dataset IDs to physical tables) and a query pool as `graphite_readonly`, which has SELECT only on the `datasets` schema.
 - Enforces `statement_timeout`, a row limit, and an allowlist of tables per request (the caller passes dataset IDs).
 - Parses SQL (AST check) to reject anything but a single SELECT.
 - Methods: `DescribeDataset`, `RunQuery`, `SampleRows`, `ColumnStats`.
+- Exposes an HTTP `/healthz` on `DATA_HEALTH_PORT` (50052) for probes.
 
 ### 3.5 packages/mcp-server
 Defines tools and resources once with the MCP TypeScript SDK and Zod schemas.

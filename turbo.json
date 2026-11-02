@@ -1,0 +1,66 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DATABASE_URL",
+    "DATABASE_ADMIN_URL",
+    "REDIS_URL",
+    "S3_ENDPOINT",
+    "S3_REGION",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "S3_BUCKET",
+    "S3_FORCE_PATH_STYLE",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "API_URL",
+    "WEB_URL",
+    "API_PORT",
+    "WEB_PORT",
+    "DATA_GRPC_PORT",
+    "WORKER_INTERNAL_MCP_PORT",
+    "LLM_PROVIDER",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "AGENT_TOKEN_BUDGET",
+    "AGENT_RUN_CONCURRENCY",
+    "MAX_UPLOAD_MB",
+    "MAX_QUERY_ROWS",
+    "STATEMENT_TIMEOUT_MS",
+    "NODE_ENV",
+    "INTEGRATION",
+    "LOG_LEVEL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:generate": {
+      "cache": false
+    },
+    "db:migrate": {
+      "cache": false
+    },
+    "db:setup": {
+      "cache": false
+    }
+  }
+}

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: graphite
+          POSTGRES_PASSWORD: graphite
+          POSTGRES_DB: graphite
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U graphite -d graphite"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://graphite_app:app_password@localhost:5432/graphite
+      DATABASE_ADMIN_URL: postgres://graphite:graphite@localhost:5432/graphite
+      REDIS_URL: redis://localhost:6379
+      BETTER_AUTH_SECRET: ci-secret-not-used-in-production
+      INTEGRATION: "1"
+      LLM_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:setup
+      - run: pnpm db:migrate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test

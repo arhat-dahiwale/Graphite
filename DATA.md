@@ -328,6 +328,7 @@ Created by the ingestion worker as `datasets.ds_<id>`:
 | `presence:{dashboardId}` | Hash of userId to presence data | ~30 s, refreshed |
 | `cursor:{dashboardId}:{userId}` | Last cursor position | ~10 s |
 | `run:{runId}:events` | Pub/sub channel for run events | n/a |
+| `dataset:{datasetId}:events` | Pub/sub channel for ingestion progress | n/a |
 | `dash:{dashboardId}:events` | Pub/sub channel for dashboard events | n/a |
 | `rl:{scope}:{id}` | Rate limit counters | window |
 | `schema:{datasetId}` | Cached schema summary | 1 h |

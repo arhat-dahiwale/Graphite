@@ -15,128 +15,131 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 ## Phase 0: Foundation
 **Goal:** a reproducible monorepo and local environment.
 
-- [ ] Turborepo + pnpm workspace with apps and packages from the README layout
-- [ ] TypeScript, ESLint, Prettier, shared tsconfig
-- [ ] Docker Compose: Postgres, Redis, MinIO
-- [ ] Drizzle set up with a migration pipeline
-- [ ] GitHub Actions: lint, typecheck, test
-- [ ] `.env.example` and base README
+- [x] Turborepo + pnpm workspace with apps and packages from the README layout
+- [x] TypeScript, ESLint, Prettier, shared tsconfig
+- [x] Docker Compose: Postgres, Redis, MinIO
+- [x] Drizzle set up with a migration pipeline
+- [x] GitHub Actions: lint, typecheck, test
+- [x] `.env.example` and base README
 
 **Exit criteria**
-- [ ] `pnpm install && docker compose up -d && pnpm dev` starts all apps
-- [ ] Each app exposes a hello-world endpoint
+- [x] `pnpm install && docker compose up -d && pnpm dev` starts all apps
+- [x] Each app exposes a hello-world endpoint
 
 ---
 
 ## Phase 1: Auth, organizations, projects
 **Goal:** multi-tenant skeleton.
 
-- [ ] Auth with email and OAuth sign-in, plus sessions
-- [ ] Organizations, members, roles (owner, editor, viewer)
-- [ ] Email invitations and accept flow
-- [ ] Projects CRUD
-- [ ] Central `authorize()` helper
-- [ ] Repository layer with tenant filtering
-- [ ] App shell UI: sidebar, org switcher, project list
+- [x] Auth with email and OAuth sign-in, plus sessions
+- [x] Organizations, members, roles (owner, editor, viewer)
+- [x] Email invitations and accept flow
+- [x] Projects CRUD
+- [x] Central `authorize()` helper
+- [x] Repository layer with tenant filtering
+- [x] App shell UI: sidebar, org switcher, project list
 
 **Exit criteria**
-- [ ] Two users in different orgs cannot see each other's data (integration test passes)
-- [ ] Role checks verified for owner, editor, and viewer
+- [x] Two users in different orgs cannot see each other's data (integration test passes)
+- [x] Role checks verified for owner, editor, and viewer
 
 ---
 
 ## Phase 2: CSV ingestion
 **Goal:** upload a CSV and query it.
 
-- [ ] Upload endpoint with streaming to MinIO
-- [ ] BullMQ ingestion worker with idempotent job IDs
-- [ ] Column type inference and bulk load into `datasets.ds_<id>`
-- [ ] Ingestion progress events over SSE
-- [ ] Dataset page: progress, preview table, column types, stats
-- [ ] Manual column type override
-- [ ] gRPC data service with `DescribeDataset`, `SampleRows`, `ColumnStats`, `RunQuery`
-- [ ] `graphite_readonly` role, schema separation, statement timeout
-- [ ] SQL AST check (single SELECT only), row limit, table allowlist
+- [x] Upload endpoint with streaming to MinIO
+- [x] BullMQ ingestion worker with idempotent job IDs
+- [x] Column type inference and bulk load into `datasets.ds_<id>`
+- [x] Ingestion progress events over SSE
+- [x] Dataset page: progress, preview table, column types, stats
+- [x] Manual column type override
+- [x] gRPC data service with `DescribeDataset`, `SampleRows`, `ColumnStats`, `RunQuery`
+- [x] `graphite_readonly` role, schema separation, statement timeout
+- [x] SQL AST check (single SELECT only), row limit, table allowlist
 
 **Exit criteria**
-- [ ] A 10 MB CSV is uploaded and previewed in under 30 seconds
-- [ ] Tests confirm unsafe SQL is rejected (writes, multiple statements, other schemas)
+- [x] A 10 MB CSV is uploaded and previewed in under 30 seconds
+- [x] Tests confirm unsafe SQL is rejected (writes, multiple statements, other schemas)
 
 ---
 
 ## Phase 3: Chart spec and manual dashboard
 **Goal:** a full dashboard experience with no AI.
 
-- [ ] `packages/chart-spec` Zod schemas
-- [ ] `specToEChartsOption` adapter
-- [ ] Structured query compiler (spec query to safe SQL)
-- [ ] Manual chart builder UI
-- [ ] Dashboards, charts, and chart versions in the database
-- [ ] Chart version history and revert
-- [ ] Canvas with drag, resize, and swap
-- [ ] Framer Motion layout transitions
-- [ ] Layout persistence with `layout_version`
+- [x] `packages/chart-spec` Zod schemas
+- [x] `specToEChartsOption` adapter
+- [x] Structured query compiler (spec query to safe SQL)
+- [x] Manual chart builder UI
+- [x] Dashboards, charts, and chart versions in the database
+- [x] Chart version history and revert
+- [x] Canvas with drag, resize, and swap
+- [x] Framer Motion layout transitions
+- [x] Layout persistence with `layout_version`
 
 **Exit criteria**
-- [ ] A user can build, arrange, and edit a multi-chart dashboard manually
-- [ ] Reverting a chart creates a new version and renders correctly
-- [ ] The product is demoable without any AI features
+- [x] A user can build, arrange, and edit a multi-chart dashboard manually
+- [x] Reverting a chart creates a new version and renders correctly
+- [x] The product is demoable without any AI features
 
 ---
 
 ## Phase 4: The agent
 **Goal:** the AI builds and re-makes charts.
 
-- [ ] Vercel AI SDK integration with provider config
-- [ ] Tools: `describe_dataset`, `run_sql`, `create_chart_spec`, `update_chart_spec`
-- [ ] System prompts and prompt-injection safeguards for CSV content
-- [ ] `agent-run` BullMQ queue with concurrency limit
-- [ ] Streaming run events via Redis pub/sub and SSE
-- [ ] Agent side panel with `useChat`, step timeline, and cancel button
-- [ ] "Re-make this chart" action on each chart card
-- [ ] Spec validation with retry on invalid output
-- [ ] Per-run token budget
-- [ ] `agent_runs`, `agent_steps`, `conversations`, and `messages` persistence
+- [x] Vercel AI SDK integration with provider config
+- [x] Tools: `describe_dataset`, `run_sql`, `create_chart_spec`, `update_chart_spec`
+- [x] System prompts and prompt-injection safeguards for CSV content
+- [x] `agent-run` BullMQ queue with concurrency limit
+- [x] Streaming run events via Redis pub/sub and SSE
+- [x] Agent side panel with `useChat`, step timeline, and cancel button
+- [x] "Re-make this chart" action on each chart card
+- [x] Spec validation with retry on invalid output
+- [x] Per-run token budget
+- [x] `agent_runs`, `agent_steps`, `conversations`, and `messages` persistence
 
 **Exit criteria**
-- [ ] "Build a dashboard" on a fresh dataset produces at least 3 valid charts
-- [ ] Re-make creates a new chart version
-- [ ] Cancelling a run stops it between steps
+- [x] "Build a dashboard" on a fresh dataset produces at least 3 valid charts
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] Re-make creates a new chart version
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] Cancelling a run stops it between steps
 
 ---
 
 ## Phase 5: MCP server (internal)
 **Goal:** tools live behind MCP.
 
-- [ ] `packages/mcp-server` with Phase 4 tools
-- [ ] Additional tools: `list_projects`, `list_datasets`, `list_dashboards`, `list_charts`, `sample_rows`, `add_chart_to_dashboard`
-- [ ] Orchestrator switched to the AI SDK MCP client
-- [ ] Identity propagation into every tool call
-- [ ] Authorization and tenant checks inside each tool
-- [ ] Audit log entries for write tools
+- [x] `packages/mcp-server` with Phase 4 tools
+- [x] Additional tools: `list_projects`, `list_datasets`, `list_dashboards`, `list_charts`, `sample_rows`, `add_chart_to_dashboard`
+- [x] Orchestrator switched to the AI SDK MCP client
+- [x] Identity propagation into every tool call
+- [x] Authorization and tenant checks inside each tool
+- [x] Audit log entries for write tools
 
 **Exit criteria**
-- [ ] Agent behavior is unchanged from Phase 4
-- [ ] All agent tool calls pass through MCP
+- [x] Agent behavior is unchanged from Phase 4
+- [ ] Verified with a live LLM (deferred: no API key during overnight build)
+- [x] All agent tool calls pass through MCP
 
 ---
 
 ## Phase 6: Real-time collaboration
 **Goal:** multi-user live editing.
 
-- [ ] Socket.IO server with Redis adapter
-- [ ] Room join with membership check
-- [ ] Presence (who is viewing)
-- [ ] Live cursors
-- [ ] "Who is moving which chart" indicators
-- [ ] Versioned layout writes with `baseVersion`
-- [ ] Conflict feedback and reconciliation in the UI
-- [ ] Live chart version events, including agent-created charts
+- [x] Socket.IO server with Redis adapter
+- [x] Room join with membership check
+- [x] Presence (who is viewing)
+- [x] Live cursors
+- [x] "Who is moving which chart" indicators
+- [x] Versioned layout writes with `baseVersion`
+- [x] Conflict feedback and reconciliation in the UI
+- [x] Live chart version events, including agent-created charts
 
 **Exit criteria**
-- [ ] Two browsers connected to different API instances stay in sync
-- [ ] Conflict path is covered by a test
-- [ ] Viewers cannot save layout changes
+- [x] Two browsers connected to different API instances stay in sync
+- [x] Conflict path is covered by a test
+- [x] Viewers cannot save layout changes
 
 ---
 
@@ -226,13 +229,13 @@ Each phase has a goal, deliverables, and an exit criterion. Do not start a phase
 
 Tick a phase only when every box inside it is checked.
 
-- [ ] Phase 0: Foundation
-- [ ] Phase 1: Auth, orgs, projects
-- [ ] Phase 2: CSV ingestion
-- [ ] Phase 3: Manual dashboard
-- [ ] Phase 4: Agent
-- [ ] Phase 5: MCP (internal)
-- [ ] Phase 6: Collaboration
+- [x] Phase 0: Foundation
+- [x] Phase 1: Auth, orgs, projects
+- [x] Phase 2: CSV ingestion
+- [x] Phase 3: Manual dashboard
+- [ ] Phase 4: Agent (done except live-LLM verification)
+- [ ] Phase 5: MCP (internal) (done except live-LLM verification)
+- [x] Phase 6: Collaboration
 - [ ] Phase 7: MCP (external)
 - [ ] Phase 8: Observability
 - [ ] Phase 9: Kubernetes and CI/CD

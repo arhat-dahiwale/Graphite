@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "services/*"
+  - "packages/*"
+minimumReleaseAgeExclude:
+  - bullmq@6.5.3
+
+onlyBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - protobufjs
+
+ignoredBuiltDependencies:
+  - esbuild
+  - msgpackr-extract
+  - protobufjs

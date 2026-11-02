@@ -1,0 +1,44 @@
+syntax = "proto3";
+package graphite.data.v1;
+
+service DataService {
+  rpc DescribeDataset(DescribeDatasetRequest) returns (DescribeDatasetResponse);
+  rpc SampleRows(SampleRowsRequest) returns (RowsResponse);
+  rpc ColumnStats(ColumnStatsRequest) returns (ColumnStatsResponse);
+  rpc RunQuery(RunQueryRequest) returns (RowsResponse);
+}
+
+message Context {
+  string organization_id = 1;
+  string user_id = 2;
+  string request_id = 3;
+}
+
+message DescribeDatasetRequest { Context ctx = 1; string dataset_id = 2; }
+message DescribeDatasetResponse {
+  string dataset_id = 1;
+  int64 row_count = 2;
+  repeated Column columns = 3;
+}
+message Column { string name = 1; string type = 2; bool nullable = 3; string stats_json = 4; }
+
+message SampleRowsRequest { Context ctx = 1; string dataset_id = 2; int32 limit = 3; }
+
+message ColumnStatsRequest { Context ctx = 1; string dataset_id = 2; string column = 3; }
+message ColumnStatsResponse { string stats_json = 1; }
+
+message RunQueryRequest {
+  Context ctx = 1;
+  repeated string dataset_ids = 2;   // table allowlist
+  string sql = 3;                    // single SELECT only
+  int32 row_limit = 4;               // capped server-side
+  int32 timeout_ms = 5;              // capped server-side
+}
+
+message RowsResponse {
+  repeated string columns = 1;
+  repeated Row rows = 2;
+  bool truncated = 3;
+  int32 duration_ms = 4;
+}
+message Row { repeated string values_json = 1; }
