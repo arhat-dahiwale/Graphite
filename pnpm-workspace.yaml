@@ -5,13 +5,11 @@ packages:
 minimumReleaseAgeExclude:
   - bullmq@6.5.3
 
-onlyBuiltDependencies:
-  - playwright
-  - esbuild
-  - msgpackr-extract
-  - protobufjs
-
+# None of these postinstalls are required (esbuild ships its binary via
+# optional deps; msgpackr has a JS fallback; protobufjs postinstall is CLI-only;
+# playwright browsers install via `playwright install`). Approved-skip list:
 ignoredBuiltDependencies:
   - esbuild
   - msgpackr-extract
   - protobufjs
+  - playwright

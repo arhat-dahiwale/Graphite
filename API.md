@@ -206,7 +206,8 @@ OAuth sign-in (Google/GitHub) is active only when the corresponding client id/se
 | `get` | query | viewer | Dashboard, layout, current chart specs |
 | `create` / `rename` / `delete` | mutation | editor | |
 | `saveLayout` | mutation | editor | Input: `{ dashboardId, baseVersion, items[] }`. Returns new `layoutVersion` or `CONFLICT` with current layout |
-| `setShare` | mutation | editor | Enable/disable public link |
+| `setShare` | mutation | editor | Enable/disable public link. Returns `{ shareId, shareEnabled }`; disabling revokes access immediately |
+| `setFilters` | mutation | editor | Dashboard-level filters (validated `{field, op, value}` list, max 10); applied through the chart query compiler |
 
 ### `chart`
 | Procedure | Type | Role | Description |
@@ -217,7 +218,7 @@ OAuth sign-in (Google/GitHub) is active only when the corresponding client id/se
 | `createVersion` | mutation | editor | Save an edited spec as a new version |
 | `revert` | mutation | editor | Create a new version copied from an older one |
 | `addToDashboard` / `removeFromDashboard` | mutation | editor | |
-| `data` | query | viewer | Query results for rendering a spec |
+| `data` | query | viewer | Query results for rendering a spec. Optional `dashboardId` applies that dashboard's saved filters through the compiler (tenant-checked) |
 
 ### `run` (agent)
 | Procedure | Type | Role | Description |
@@ -235,6 +236,9 @@ Agent runs execute in the `agent-run` BullMQ queue with a concurrency limit. The
 
 ### `usage`
 `orgSummary` (owner): per-day rollups from `usage_daily` (run counts, tokens, cost) plus a `costNote` — `simulated (mock model)` when the deterministic mock model produced the runs, `provider-reported` for real-model runs.
+
+### `audit`
+`list` (owner): paginated, tenant-scoped audit entries (`{ rows, total, page, pageSize }`) for the audit log viewer.
 
 ---
 

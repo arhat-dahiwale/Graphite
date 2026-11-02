@@ -60,7 +60,7 @@ flowchart LR
 - **Canvas**: react-grid-layout v2 (hook-based container width, `dragConfig`/`resizeConfig`) for positions and sizes; Framer Motion `layout` animations for swaps and reflow.
 - **Charts**: ECharts renders a `ChartSpec` through a single `specToEChartsOption()` adapter.
 - **State**: TanStack Query for server state (via tRPC), Zustand for editor-local state (selection, layout draft, presence).
-- **Agent panel**: `useChat` and SSE show streamed text, tool-call steps, and cancel controls.
+- **Agent panel**: a custom SSE transport (not the `useChat` hook) shows streamed text, tool-call steps, token/trace summaries, and cancel controls. The run protocol is step-streaming over Redis pub/sub → SSE, not a chat protocol.
 - **Collaboration**: Socket.IO client joins a dashboard room, sends cursor/layout events, and receives remote updates.
 
 ### 3.2 apps/api (Express)

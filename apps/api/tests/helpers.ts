@@ -59,6 +59,9 @@ export async function startTestApp(
   opts?: { agentTokenBudget?: number; redisDb?: number; mcpTokenRateLimit?: number },
 ): Promise<TestApp> {
   loadEnv();
+  // Tight test polling (run.get loops) can exceed the product rate limit;
+  // the limiter is exercised explicitly in rate-limits.test.ts.
+  process.env.USER_REQUESTS_PER_MIN = process.env.USER_REQUESTS_PER_MIN ?? "0";
   const adminUrl = requireEnv("DATABASE_ADMIN_URL");
   const u = new URL(adminUrl);
   u.pathname = `/${TEST_DB_NAME}`;

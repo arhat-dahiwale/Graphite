@@ -46,7 +46,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app?.close();
-  delete process.env.USER_REQUESTS_PER_MIN;
+  process.env.USER_REQUESTS_PER_MIN = "0";
   delete process.env.ORG_RUNS_PER_HOUR;
 });
 
@@ -69,7 +69,7 @@ describe("per-user rate limit", () => {
       const limited = codes.lastIndexOf(429);
       expect(limited).toBeGreaterThan(0); // later requests are limited
     } finally {
-      process.env.USER_REQUESTS_PER_MIN = "300";
+      process.env.USER_REQUESTS_PER_MIN = "0";
     }
   });
 

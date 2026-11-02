@@ -139,6 +139,7 @@ Unique: (`dataset_id`, `name`).
 | layout_version | int | Incremented on each accepted layout write |
 | share_id | text unique null | Public read-only link ID |
 | share_enabled | boolean | |
+| filters | jsonb null | Dashboard-level filters; validated `{field, op, value}` list applied through the chart query compiler |
 | created_by | text → users | |
 | deleted_at | timestamptz null | |
 
@@ -267,7 +268,16 @@ Connected-client records shown on the Integrations page.
 | first_seen_at, last_seen_at | timestamptz | |
 
 ### `oauth_clients`, `oauth_codes`, `oauth_tokens` (Phase 10)
-Added when OAuth 2.1 is implemented; may be provided by the auth library's OAuth provider plugin.
+
+Minimal OAuth 2.1 authorization server for MCP (hand-rolled; Better Auth ships OAuth *client* plugins only, no provider).
+
+| Table | Key columns |
+|---|---|
+| `oauth_clients` | `id`, `client_id` unique, `client_secret_hash` (null for public PKCE clients), `name`, `redirect_uris[]`, `registered_by` → users, `organization_id` (tenant binding) |
+| `oauth_codes` | `id`, `code_hash` unique (SHA-256), `client_id`, `user_id`, `organization_id`, `redirect_uri`, `scope`, `code_challenge` (S256), `expires_at` (10 min), `used_at` (single use) |
+| `oauth_tokens` | `id`, `token_hash` unique (SHA-256), `kind` (`access`\|`refresh`), `client_id`, `user_id`, `organization_id`, `scope`, `family_id` (rotation: refresh revokes the family), `expires_at`, `revoked_at` |
+
+Access tokens are opaque (`gphat_...`), accepted by the MCP router exactly like personal access tokens; revocation (RFC 7009) kills the token family.
 
 ## 7. Operations
 

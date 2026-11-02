@@ -510,7 +510,7 @@ export const mcpClients = pgTable("mcp_clients", {
   clientName: text("client_name").notNull(),
   clientVersion: text("client_version"),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------

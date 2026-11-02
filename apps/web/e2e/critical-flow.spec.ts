@@ -50,13 +50,14 @@ test("sign-up through agent-built dashboard", async ({ page }) => {
   // progress, so poll with reloads).
   await page.locator('input[type="file"]').setInputFiles(csvPath);
   await expect(page.getByText("sales.csv").first()).toBeVisible();
-  let ready = false;
-  for (let i = 0; i < 30 && !ready; i++) {
-    await page.waitForTimeout(2000);
+  // Poll with reloads; the inner expect retries within each window so the
+  // post-reload data fetch is not raced by the count.
+  await expect(async () => {
     await page.reload();
-    ready = (await page.getByText("ready", { exact: true }).count()) > 0;
-  }
-  expect(ready).toBe(true);
+    await expect(page.getByText("ready", { exact: true }).first()).toBeVisible({
+      timeout: 3_000,
+    });
+  }).toPass({ timeout: 120_000 });
 
   // 5. Create a dashboard, then open it.
   await page.getByRole("textbox", { name: "New dashboard name" }).fill("E2E Dash");
