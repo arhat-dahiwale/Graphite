@@ -215,3 +215,20 @@ Append-only log of agent work. Every agent appends one entry at the end of each 
 **Tests:** e2e 1 passed; kubeconform clean; images healthy; full vitest suite still green (141) as of Phase 8 commit
 **Decisions:** kind on host port 30080 (NodePort) after kubectl port-forward proved unreliable for multipart uploads; manual scale used for the scaling proof (KEDA operator install blocked by network)
 **Follow-ups:** KEDA automatic queue-depth scaling deferred (line in PHASES.md); HPA CPU targets need metrics-server on kind (not installed here); CI e2e/push jobs never executed in this environment
+
+### 2026-11-02 05:30 | GLM-5.3-Flash (overnight run) | Phase 10
+**Task:** Polish and extras — share links, export, filters, audit viewer, OAuth 2.1, a11y, docs, fresh-clone verification
+**Summary:**
+- Public share links: dashboard.setShare tRPC (editor), GET /api/v1/public/dashboards/:shareId (unauth, 404 when revoked); payload is minimal (name, chart specs, pre-aggregated data only — tests assert no org/user fields); /share/[shareId] page renders read-only ECharts
+- Export: GET /api/v1/dashboards/:id/export?format=json (specs + layout; viewer+, 403 unauth); per-chart PNG via ECharts getDataURL (hover button + aria-label)
+- Dashboard-level filters: dashboards.filters jsonb (migration 0001), setFilters tRPC, applied in chart.data via re-validated merge through the compiler; tests prove filter application (category + date range), injection payloads stay literals, cross-tenant dashboard 404s
+- Audit log viewer: audit.list tRPC (owner-only via org:manage, paginated, tenant-scoped), /app/audit UI page; tests for pagination + cross-tenant NOT_FOUND
+- OAuth 2.1 for MCP: hand-rolled minimal AS (Better Auth has no provider plugin); oauth_clients/codes/tokens tables (migration 0002); discovery metadata, dynamic client registration (RFC 7591), /oauth/authorize with PKCE S256 required, /oauth/token (code + refresh with family rotation), /oauth/revoke (RFC 7009); MCP router accepts gphat_ tokens with identical scope/org/role behavior. Scripted-client tests cover the full flow incl. plain-PKCE and wrong-verifier rejection
+- A11y: axe (via @axe-core/playwright) scans of signin/signup/share pages pass (serious/critical = 0) after bumping auth-page link contrast; Ctrl/Cmd+E export shortcut; aria-labels on chart export buttons
+- Docs: README rewritten (accurate stack incl. custom-SSE-not-useChat, both MCP mounts, ports, run steps, observability profile, Docker/k8s, honest limitations incl. bitnamilegacy/minio being unmaintained local-dev-only); docs/architecture.md write-up; ARCHITECTURE.md useChat correction; DATA.md (filters column, oauth tables); API.md updated
+- FRESH-CLONE VERIFICATION caught and fixed real bugs: (1) pnpm install failed on fresh clones (ERR_PNPM_IGNORED_BUILDS) — contradictory build-script lists fixed in pnpm-workspace.yaml; (2) duplicate first_seen_at column in the mcp_clients schema (broke client tracking on fresh installs) — schema fixed + corrective migration 0003 (0002 already applied locally drops last_seen_at); (3) test env restore leaked USER_REQUESTS_PER_MIN=300 across vitest files; (4) e2e reload poll raced the data fetch (expect.toPass). Verified: clone -> install -> env -> compose -> db:setup/migrate -> dev -> e2e 4/4 -> vitest 141 green
+**Files changed:** packages/db (schema, migrations 0001-0003, repos), packages/mcp-server (oauth.ts, server.ts), apps/api (rest/{public,oauth}.ts, routers/{dashboard,chart,audit,index}.ts), apps/web (share page, audit page, dashboard page, chart-renderer, shell, e2e a11y), docs/, README.md
+**Docs updated:** API.md, ARCHITECTURE.md, DATA.md, README.md, docs/architecture.md, PHASES.md
+**Tests:** full suite 141 green on final code; e2e 4/4; lint + typecheck clean; fresh-clone suite green
+**Decisions:** hand-rolled OAuth 2.1 AS (no provider plugin available); migration 0003 corrects 0002 rather than editing an applied migration; kind cluster deleted after verification (recreatable via README)
+**Follow-ups:** demo video, stretch items (Yjs/DuckDB/refresh) intentionally deferred per run instructions
